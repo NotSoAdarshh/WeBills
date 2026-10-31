@@ -11,18 +11,39 @@ import {
   Eye,
   EyeOff,
   Edit3,
+  Plus,
+  Trash2,
+  GripVertical,
 } from 'lucide-react'
 import {
   defaultTemplateConfig,
   defaultInvoiceColumns,
+  defaultSectionOrder,
   getStoredTemplateConfig,
   saveStoredTemplateConfig,
 } from '../utils/pdfTemplateStorage'
+
+let customColumnCounter = 100
+function generateCustomColId(label) {
+  customColumnCounter += 1
+  return `custom_${label.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}_${customColumnCounter}`
+}
 
 export default function PdfCustomiser() {
   const [config, setConfig] = useState(getStoredTemplateConfig)
   const [notification, setNotification] = useState(null)
   const [editingColumnId, setEditingColumnId] = useState(null)
+
+  // New column creation form state
+  const [isAddColumnModalOpen, setIsAddColumnModalOpen] = useState(false)
+  const [newColumnLabel, setNewColumnLabel] = useState('')
+  const [newColumnAlign, setNewColumnAlign] = useState('left')
+
+  // Drag and drop states for PDF sections and columns
+  const [draggedSectionIndex, setDraggedSectionIndex] = useState(null)
+  const [draggedSectionOverIndex, setDraggedSectionOverIndex] = useState(null)
+  const [draggedColumnId, setDraggedColumnId] = useState(null)
+  const [draggedColumnOverId, setDraggedColumnOverId] = useState(null)
 
   useEffect(() => {
     const handleSync = () => {
@@ -42,7 +63,49 @@ export default function PdfCustomiser() {
     })
   }
 
-  // Column management handlers
+  // --- Column Management Handlers ---
+  const handleAddColumn = (e) => {
+    e.preventDefault()
+    if (!newColumnLabel.trim()) return
+
+    const sanitizedId = generateCustomColId(newColumnLabel)
+    const newCol = {
+      id: sanitizedId,
+      label: newColumnLabel.trim(),
+      align: newColumnAlign,
+      enabled: true,
+      locked: false,
+      isCustom: true,
+    }
+
+    const currentCols = config.columns || defaultInvoiceColumns
+    // Insert custom column right before the last locked 'total' column
+    const totalIndex = currentCols.findIndex((c) => c.id === 'total')
+    let nextCols
+    if (totalIndex !== -1) {
+      nextCols = [...currentCols.slice(0, totalIndex), newCol, ...currentCols.slice(totalIndex)]
+    } else {
+      nextCols = [...currentCols, newCol]
+    }
+
+    handleChange('columns', nextCols)
+    setNewColumnLabel('')
+    setNewColumnAlign('left')
+    setIsAddColumnModalOpen(false)
+    showNotification(`New column "${newCol.label}" added`)
+  }
+
+  const handleDeleteColumn = (colId) => {
+    const target = (config.columns || defaultInvoiceColumns).find((c) => c.id === colId)
+    if (target?.locked) return
+
+    if (window.confirm(`Delete column "${target?.label}"?`)) {
+      const updated = (config.columns || defaultInvoiceColumns).filter((c) => c.id !== colId)
+      handleChange('columns', updated)
+      showNotification(`Column "${target?.label}" deleted`)
+    }
+  }
+
   const handleToggleColumn = (colId) => {
     const updatedColumns = (config.columns || defaultInvoiceColumns).map((col) => {
       if (col.id === colId && !col.locked) {
@@ -71,6 +134,70 @@ export default function PdfCustomiser() {
       return col
     })
     handleChange('columns', updatedColumns)
+  }
+
+  // --- Drag and Drop: Columns in Table Header ---
+  const handleColumnDragStart = (colId) => {
+    setDraggedColumnId(colId)
+  }
+
+  const handleColumnDragOver = (e, colId) => {
+    e.preventDefault()
+    if (draggedColumnId !== colId) {
+      setDraggedColumnOverId(colId)
+    }
+  }
+
+  const handleColumnDrop = (targetColId) => {
+    if (!draggedColumnId || draggedColumnId === targetColId) {
+      setDraggedColumnId(null)
+      setDraggedColumnOverId(null)
+      return
+    }
+
+    const currentCols = [...(config.columns || defaultInvoiceColumns)]
+    const sourceIdx = currentCols.findIndex((c) => c.id === draggedColumnId)
+    const targetIdx = currentCols.findIndex((c) => c.id === targetColId)
+
+    if (sourceIdx !== -1 && targetIdx !== -1) {
+      const [movedCol] = currentCols.splice(sourceIdx, 1)
+      currentCols.splice(targetIdx, 0, movedCol)
+      handleChange('columns', currentCols)
+      showNotification(`Reordered column "${movedCol.label}"`)
+    }
+
+    setDraggedColumnId(null)
+    setDraggedColumnOverId(null)
+  }
+
+  // --- Drag and Drop: PDF Document Sections ---
+  const handleSectionDragStart = (index) => {
+    setDraggedSectionIndex(index)
+  }
+
+  const handleSectionDragOver = (e, index) => {
+    e.preventDefault()
+    if (draggedSectionIndex !== index) {
+      setDraggedSectionOverIndex(index)
+    }
+  }
+
+  const handleSectionDrop = (targetIndex) => {
+    if (draggedSectionIndex === null || draggedSectionIndex === targetIndex) {
+      setDraggedSectionIndex(null)
+      setDraggedSectionOverIndex(null)
+      return
+    }
+
+    const currentSections = [...(config.sectionOrder || defaultSectionOrder)]
+    const [movedSection] = currentSections.splice(draggedSectionIndex, 1)
+    currentSections.splice(targetIndex, 0, movedSection)
+
+    handleChange('sectionOrder', currentSections)
+    showNotification('PDF layout order rearranged via drag and drop')
+
+    setDraggedSectionIndex(null)
+    setDraggedSectionOverIndex(null)
   }
 
   const handleLogoUpload = (e) => {
@@ -108,6 +235,7 @@ export default function PdfCustomiser() {
   }
 
   const activeColumns = (config.columns || defaultInvoiceColumns).filter((c) => c.enabled)
+  const currentSectionOrder = config.sectionOrder || defaultSectionOrder
 
   // Mock invoice line items for previewing
   const mockItems = [
@@ -119,6 +247,7 @@ export default function PdfCustomiser() {
       discount: '0%',
       tax: '8.5%',
       total: 37.0,
+      customVal: 'Sample A',
     },
     {
       item: 'Artisan Sourdough Loaf',
@@ -128,6 +257,7 @@ export default function PdfCustomiser() {
       discount: '$1.00',
       tax: '8.5%',
       total: 5.2,
+      customVal: 'Sample B',
     },
     {
       item: 'Organic Almond Milk',
@@ -137,8 +267,281 @@ export default function PdfCustomiser() {
       discount: '0%',
       tax: '8.5%',
       total: 9.5,
+      customVal: 'Sample C',
     },
   ]
+
+  // Render individual sections for drag-and-drop PDF canvas
+  const renderPdfSection = (sectionKey) => {
+    switch (sectionKey) {
+      case 'header':
+        return (
+          <div key="header" className="pb-4 mb-4 flex items-start justify-between gap-4 border-b-2 border-black">
+            <div className="flex items-center gap-3">
+              {config.logoDataUrl ? (
+                <img
+                  src={config.logoDataUrl}
+                  alt="Store Logo"
+                  className="h-12 w-12 object-contain rounded-lg border border-black"
+                />
+              ) : (
+                <div className="h-12 w-12 rounded-xl bg-black text-white flex items-center justify-center font-bold text-base shadow-sm">
+                  WB
+                </div>
+              )}
+              <div>
+                <h3 className="text-base font-bold text-black tracking-tight">
+                  {config.companyName || 'Store Name'}
+                </h3>
+                <p className="text-[11px] text-neutral-700 mt-0.5 max-w-[280px]">
+                  {config.companyAddress}
+                </p>
+                <p className="text-[10px] text-neutral-600">{config.companyContact}</p>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <span className="text-xl font-black tracking-wider uppercase block text-black">
+                INVOICE
+              </span>
+              <span className="text-xs font-mono text-neutral-800 block mt-0.5 font-bold">
+                #INV-2026-0891
+              </span>
+              <span className="text-[10px] text-neutral-600 block">Date: 2026-10-31</span>
+              {config.gstNumber && (
+                <span className="text-[10px] font-mono text-black font-semibold block mt-1">
+                  GST/Tax ID: {config.gstNumber}
+                </span>
+              )}
+            </div>
+          </div>
+        )
+
+      case 'billTo':
+        return (
+          <div key="billTo" className="grid grid-cols-2 gap-4 pb-4 mb-4 border-b border-black/20 text-xs">
+            <div>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-500 block mb-1">
+                Billed To
+              </span>
+              <span className="font-bold text-black block">Sarah Jenkins</span>
+              {config.showCustomerPhone && (
+                <>
+                  <span className="text-neutral-700 block text-[11px]">+1 (555) 234-5678</span>
+                  <span className="text-neutral-600 block text-[10px] font-mono">Tax: TX-99821</span>
+                </>
+              )}
+            </div>
+
+            <div className="text-right">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-500 block mb-1">
+                Payment Status
+              </span>
+              <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-black bg-black text-white">
+                PAID IN FULL
+              </span>
+              <span className="text-neutral-700 block text-[10px] mt-1 font-medium">Mode: CASH / CARD</span>
+            </div>
+          </div>
+        )
+
+      case 'itemsTable':
+        return (
+          <div key="itemsTable" className="mb-4 overflow-hidden rounded-lg border border-black">
+            <div className="px-3 py-1 bg-neutral-100 text-[10px] text-neutral-600 flex items-center justify-between border-b border-black/10">
+              <span className="italic flex items-center gap-1">
+                <GripVertical className="h-3 w-3" />
+                Drag column headers horizontally to reorder
+              </span>
+              <span className="font-mono">{activeColumns.length} Columns</span>
+            </div>
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-black text-white border-b border-black">
+                  {activeColumns.map((col) => {
+                    const isDragging = draggedColumnId === col.id
+                    const isOver = draggedColumnOverId === col.id
+
+                    return (
+                      <th
+                        key={col.id}
+                        draggable
+                        onDragStart={() => handleColumnDragStart(col.id)}
+                        onDragOver={(e) => handleColumnDragOver(e, col.id)}
+                        onDrop={() => handleColumnDrop(col.id)}
+                        className={`py-2 px-3 font-bold text-[10px] uppercase tracking-wider select-none cursor-move transition-all ${
+                          col.align === 'center'
+                            ? 'text-center'
+                            : col.align === 'right'
+                            ? 'text-right'
+                            : 'text-left'
+                        } ${isDragging ? 'opacity-30' : ''} ${
+                          isOver ? 'bg-neutral-800 ring-2 ring-white ring-inset' : ''
+                        }`}
+                        title="Click and drag to reorder column"
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          <GripVertical className="h-2.5 w-2.5 text-neutral-400" />
+                          {col.label}
+                        </span>
+                      </th>
+                    )
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/20 bg-white">
+                {mockItems.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-neutral-50">
+                    {activeColumns.map((col) => {
+                      const alignClass =
+                        col.align === 'center'
+                          ? 'text-center'
+                          : col.align === 'right'
+                          ? 'text-right'
+                          : 'text-left'
+
+                      if (col.id === 'item') {
+                        return (
+                          <td key={col.id} className={`py-2 px-3 text-black ${alignClass}`}>
+                            <span className="font-semibold block">{row.item}</span>
+                          </td>
+                        )
+                      }
+
+                      if (col.id === 'sku') {
+                        return (
+                          <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono text-[11px] ${alignClass}`}>
+                            {row.sku}
+                          </td>
+                        )
+                      }
+
+                      if (col.id === 'qty') {
+                        return (
+                          <td key={col.id} className={`py-2 px-3 text-black font-mono font-medium ${alignClass}`}>
+                            {row.qty}
+                          </td>
+                        )
+                      }
+
+                      if (col.id === 'price') {
+                        return (
+                          <td key={col.id} className={`py-2 px-3 text-black font-mono ${alignClass}`}>
+                            ${row.price.toFixed(2)}
+                          </td>
+                        )
+                      }
+
+                      if (col.id === 'discount') {
+                        return (
+                          <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono ${alignClass}`}>
+                            {row.discount}
+                          </td>
+                        )
+                      }
+
+                      if (col.id === 'tax') {
+                        return (
+                          <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono ${alignClass}`}>
+                            {row.tax}
+                          </td>
+                        )
+                      }
+
+                      if (col.id === 'total') {
+                        return (
+                          <td key={col.id} className={`py-2 px-3 text-black font-bold font-mono ${alignClass}`}>
+                            ${row.total.toFixed(2)}
+                          </td>
+                        )
+                      }
+
+                      // Dynamic value for custom created columns
+                      return (
+                        <td key={col.id} className={`py-2 px-3 text-black font-mono ${alignClass}`}>
+                          {row.customVal || '—'}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+
+      case 'totals':
+        return (
+          <div key="totals" className="flex flex-col items-end gap-1 mb-5 text-xs text-neutral-800">
+            <div className="flex justify-between w-48">
+              <span>Subtotal:</span>
+              <span className="font-mono font-semibold text-black">$51.70</span>
+            </div>
+            {config.showTaxBreakdown && (
+              <div className="flex justify-between w-48 text-[11px] text-neutral-600">
+                <span>Tax / GST (8.5%):</span>
+                <span className="font-mono text-black">+$4.39</span>
+              </div>
+            )}
+            <div className="flex justify-between w-48 pt-2 mt-1 border-t-2 border-black text-sm font-bold text-black">
+              <span>Grand Total:</span>
+              <span className="font-mono text-base font-black text-black">$56.09</span>
+            </div>
+          </div>
+        )
+
+      case 'footer':
+        return (
+          <div key="footer" className="pt-4 border-t border-black/20 flex flex-col gap-4 text-xs">
+            <div className="flex items-start justify-between gap-4">
+              {/* Terms and conditions */}
+              {config.showTerms && (
+                <div className="flex-1">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-600 block mb-1">
+                    Terms & Conditions
+                  </span>
+                  <p className="text-[10px] text-neutral-700 whitespace-pre-line leading-relaxed">
+                    {config.termsAndConditions}
+                  </p>
+                </div>
+              )}
+
+              {/* QR Code */}
+              {config.showQrCode && (
+                <div className="flex flex-col items-center shrink-0 p-2 rounded-lg border border-black bg-neutral-100">
+                  <QrCode className="h-12 w-12 text-black" />
+                  <span className="text-[9px] text-neutral-700 mt-1 uppercase font-mono font-bold">
+                    Scan To Verify
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Signature Line */}
+            {config.showSignature && (
+              <div className="pt-6 flex justify-end">
+                <div className="text-center w-40">
+                  <div className="border-b-2 border-black pb-1 mb-1" />
+                  <span className="text-[10px] uppercase text-black font-bold tracking-wider">
+                    Authorized Signature
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Footer Note */}
+            {config.footerNote && (
+              <p className="text-center text-[10px] text-neutral-600 pt-2 border-t border-black/20 font-medium">
+                {config.footerNote}
+              </p>
+            )}
+          </div>
+        )
+
+      default:
+        return null
+    }
+  }
 
   return (
     <div className="w-full flex flex-col font-sans select-none">
@@ -150,7 +553,7 @@ export default function PdfCustomiser() {
             Bill PDF Customizer
           </h1>
           <p className="text-xs text-white/70 mt-1">
-            Configure store metadata, columns, and layout with high-contrast monochrome PDF preview
+            Add custom columns, reorder table headers & sections via drag-and-drop, and preview live on white paper
           </p>
         </div>
 
@@ -280,20 +683,32 @@ export default function PdfCustomiser() {
             </div>
           </div>
 
-          {/* Section 2: Invoice Columns Configuration (Type & Count) */}
+          {/* Section 2: Invoice Columns Configuration & Add More Columns */}
           <div className="rounded-2xl border border-white/20 bg-black p-5 flex flex-col gap-3">
             <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                <Columns className="h-4 w-4 text-white" />
-                Invoice Columns & Table Layout
-              </h2>
-              <span className="text-xs text-white/60 font-mono">
-                {activeColumns.length} Active Columns
-              </span>
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                  <Columns className="h-4 w-4 text-white" />
+                  Invoice Columns & Table Layout
+                </h2>
+                <span className="text-xs text-white/60 font-mono mt-0.5 block">
+                  {activeColumns.length} Active Columns
+                </span>
+              </div>
+
+              {/* Add Custom Column Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsAddColumnModalOpen(true)}
+                className="h-8 px-3 rounded-lg bg-white text-black font-semibold text-xs flex items-center gap-1.5 hover:bg-white/90 transition-colors shadow-sm"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Column
+              </button>
             </div>
 
             <p className="text-xs text-white/60">
-              Toggle which columns appear on the printed bill, rename column header titles, and choose alignment.
+              Toggle column visibility, rename headers, and drag column headers on the right PDF to change order.
             </p>
 
             <div className="divide-y divide-white/10">
@@ -356,6 +771,11 @@ export default function PdfCustomiser() {
                             >
                               <Edit3 className="h-3 w-3" />
                             </button>
+                            {col.isCustom && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded border border-white/30 text-white/70">
+                                Custom
+                              </span>
+                            )}
                           </div>
                         )}
                         <span className="text-[10px] text-white/40 font-mono block">
@@ -364,22 +784,35 @@ export default function PdfCustomiser() {
                       </div>
                     </div>
 
-                    {/* Column Text Alignment Selector */}
-                    <div className="flex items-center gap-1">
-                      {['left', 'center', 'right'].map((alignOpt) => (
+                    {/* Column Text Alignment Selector & Delete */}
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1">
+                        {['left', 'center', 'right'].map((alignOpt) => (
+                          <button
+                            key={alignOpt}
+                            type="button"
+                            onClick={() => handleUpdateColumnAlign(col.id, alignOpt)}
+                            className={`h-6 px-2 rounded text-[10px] uppercase font-mono transition-colors ${
+                              col.align === alignOpt
+                                ? 'bg-white text-black font-bold'
+                                : 'border border-white/20 text-white/60 hover:text-white'
+                            }`}
+                          >
+                            {alignOpt[0]}
+                          </button>
+                        ))}
+                      </div>
+
+                      {col.isCustom && (
                         <button
-                          key={alignOpt}
                           type="button"
-                          onClick={() => handleUpdateColumnAlign(col.id, alignOpt)}
-                          className={`h-6 px-2 rounded text-[10px] uppercase font-mono transition-colors ${
-                            col.align === alignOpt
-                              ? 'bg-white text-black font-bold'
-                              : 'border border-white/20 text-white/60 hover:text-white'
-                          }`}
+                          onClick={() => handleDeleteColumn(col.id)}
+                          className="h-6 w-6 rounded border border-white/20 flex items-center justify-center text-white/50 hover:text-white hover:border-white transition-colors"
+                          title="Delete custom column"
                         >
-                          {alignOpt[0]}
+                          <Trash2 className="h-3 w-3" />
                         </button>
-                      ))}
+                      )}
                     </div>
                   </div>
                 )
@@ -453,15 +886,15 @@ export default function PdfCustomiser() {
           </div>
         </section>
 
-        {/* RIGHT PREVIEW PANEL (50% => col-span-6, Pure White Background with Pure Black Text & Elements) */}
+        {/* RIGHT PREVIEW PANEL (Interactive Drag-and-Drop Canvas) */}
         <section className="lg:col-span-6 sticky top-6">
           <div className="flex items-center justify-between mb-3 px-1">
             <span className="text-xs uppercase font-semibold tracking-wider text-white/70 flex items-center gap-1.5">
               <FileText className="h-4 w-4 text-white" />
-              Live Printable PDF Invoice Replica
+              Direct Drag-and-Drop PDF Editor
             </span>
             <span className="text-[11px] px-2 py-0.5 rounded-full border border-white/20 bg-white/[0.04] text-white/80">
-              Monochrome • White Paper
+              Drag Sections or Columns to Reorder
             </span>
           </div>
 
@@ -472,235 +905,100 @@ export default function PdfCustomiser() {
               boxShadow: '0 20px 40px -15px rgba(255, 255, 255, 0.1)',
             }}
           >
-            {/* Invoice Header */}
-            <div className="pb-4 mb-4 flex items-start justify-between gap-4 border-b-2 border-black">
-              <div className="flex items-center gap-3">
-                {config.logoDataUrl ? (
-                  <img
-                    src={config.logoDataUrl}
-                    alt="Store Logo"
-                    className="h-12 w-12 object-contain rounded-lg border border-black"
-                  />
-                ) : (
-                  <div className="h-12 w-12 rounded-xl bg-black text-white flex items-center justify-center font-bold text-base shadow-sm">
-                    WB
+            {/* Draggable Document Sections */}
+            {currentSectionOrder.map((sectionKey, index) => {
+              const isDragging = draggedSectionIndex === index
+              const isOver = draggedSectionOverIndex === index
+
+              return (
+                <div
+                  key={sectionKey}
+                  draggable
+                  onDragStart={() => handleSectionDragStart(index)}
+                  onDragOver={(e) => handleSectionDragOver(e, index)}
+                  onDrop={() => handleSectionDrop(index)}
+                  className={`group relative rounded-xl transition-all ${
+                    isDragging ? 'opacity-30 border-2 border-dashed border-black' : ''
+                  } ${isOver ? 'bg-neutral-100 ring-2 ring-black ring-offset-2' : ''}`}
+                >
+                  {/* Subtle drag handle indicator on hover */}
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
                   </div>
-                )}
-                <div>
-                  <h3 className="text-base font-bold text-black tracking-tight">
-                    {config.companyName || 'Store Name'}
-                  </h3>
-                  <p className="text-[11px] text-neutral-700 mt-0.5 max-w-[280px]">
-                    {config.companyAddress}
-                  </p>
-                  <p className="text-[10px] text-neutral-600">{config.companyContact}</p>
+
+                  {renderPdfSection(sectionKey)}
                 </div>
-              </div>
-
-              <div className="text-right">
-                <span className="text-xl font-black tracking-wider uppercase block text-black">
-                  INVOICE
-                </span>
-                <span className="text-xs font-mono text-neutral-800 block mt-0.5 font-bold">
-                  #INV-2026-0891
-                </span>
-                <span className="text-[10px] text-neutral-600 block">Date: 2026-10-31</span>
-                {config.gstNumber && (
-                  <span className="text-[10px] font-mono text-black font-semibold block mt-1">
-                    GST/Tax ID: {config.gstNumber}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Bill To & Meta Section */}
-            <div className="grid grid-cols-2 gap-4 pb-4 mb-4 border-b border-black/20 text-xs">
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-500 block mb-1">
-                  Billed To
-                </span>
-                <span className="font-bold text-black block">Sarah Jenkins</span>
-                {config.showCustomerPhone && (
-                  <>
-                    <span className="text-neutral-700 block text-[11px]">+1 (555) 234-5678</span>
-                    <span className="text-neutral-600 block text-[10px] font-mono">Tax: TX-99821</span>
-                  </>
-                )}
-              </div>
-
-              <div className="text-right">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-500 block mb-1">
-                  Payment Status
-                </span>
-                <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-black bg-black text-white">
-                  PAID IN FULL
-                </span>
-                <span className="text-neutral-700 block text-[10px] mt-1 font-medium">Mode: CASH / CARD</span>
-              </div>
-            </div>
-
-            {/* Dynamic Line Items Table (Customizable Columns & Headers) */}
-            <div className="mb-4 overflow-hidden rounded-lg border border-black">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-black text-white border-b border-black">
-                    {activeColumns.map((col) => (
-                      <th
-                        key={col.id}
-                        className={`py-2 px-3 font-bold text-[10px] uppercase tracking-wider ${
-                          col.align === 'center'
-                            ? 'text-center'
-                            : col.align === 'right'
-                            ? 'text-right'
-                            : 'text-left'
-                        }`}
-                      >
-                        {col.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-black/20 bg-white">
-                  {mockItems.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-neutral-50">
-                      {activeColumns.map((col) => {
-                        const alignClass =
-                          col.align === 'center'
-                            ? 'text-center'
-                            : col.align === 'right'
-                            ? 'text-right'
-                            : 'text-left'
-
-                        if (col.id === 'item') {
-                          return (
-                            <td key={col.id} className={`py-2 px-3 text-black ${alignClass}`}>
-                              <span className="font-semibold block">{row.item}</span>
-                            </td>
-                          )
-                        }
-
-                        if (col.id === 'sku') {
-                          return (
-                            <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono text-[11px] ${alignClass}`}>
-                              {row.sku}
-                            </td>
-                          )
-                        }
-
-                        if (col.id === 'qty') {
-                          return (
-                            <td key={col.id} className={`py-2 px-3 text-black font-mono font-medium ${alignClass}`}>
-                              {row.qty}
-                            </td>
-                          )
-                        }
-
-                        if (col.id === 'price') {
-                          return (
-                            <td key={col.id} className={`py-2 px-3 text-black font-mono ${alignClass}`}>
-                              ${row.price.toFixed(2)}
-                            </td>
-                          )
-                        }
-
-                        if (col.id === 'discount') {
-                          return (
-                            <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono ${alignClass}`}>
-                              {row.discount}
-                            </td>
-                          )
-                        }
-
-                        if (col.id === 'tax') {
-                          return (
-                            <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono ${alignClass}`}>
-                              {row.tax}
-                            </td>
-                          )
-                        }
-
-                        if (col.id === 'total') {
-                          return (
-                            <td key={col.id} className={`py-2 px-3 text-black font-bold font-mono ${alignClass}`}>
-                              ${row.total.toFixed(2)}
-                            </td>
-                          )
-                        }
-
-                        return <td key={col.id} className={`py-2 px-3 ${alignClass}`}>—</td>
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Subtotal & Calculations */}
-            <div className="flex flex-col items-end gap-1 mb-5 text-xs text-neutral-800">
-              <div className="flex justify-between w-48">
-                <span>Subtotal:</span>
-                <span className="font-mono font-semibold text-black">$51.70</span>
-              </div>
-              {config.showTaxBreakdown && (
-                <div className="flex justify-between w-48 text-[11px] text-neutral-600">
-                  <span>Tax / GST (8.5%):</span>
-                  <span className="font-mono text-black">+$4.39</span>
-                </div>
-              )}
-              <div className="flex justify-between w-48 pt-2 mt-1 border-t-2 border-black text-sm font-bold text-black">
-                <span>Grand Total:</span>
-                <span className="font-mono text-base font-black text-black">$56.09</span>
-              </div>
-            </div>
-
-            {/* Bottom Section: QR Code, Terms & Signature */}
-            <div className="pt-4 border-t border-black/20 flex flex-col gap-4 text-xs">
-              <div className="flex items-start justify-between gap-4">
-                {/* Terms and conditions */}
-                {config.showTerms && (
-                  <div className="flex-1">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-600 block mb-1">
-                      Terms & Conditions
-                    </span>
-                    <p className="text-[10px] text-neutral-700 whitespace-pre-line leading-relaxed">
-                      {config.termsAndConditions}
-                    </p>
-                  </div>
-                )}
-
-                {/* QR Code */}
-                {config.showQrCode && (
-                  <div className="flex flex-col items-center shrink-0 p-2 rounded-lg border border-black bg-neutral-100">
-                    <QrCode className="h-12 w-12 text-black" />
-                    <span className="text-[9px] text-neutral-700 mt-1 uppercase font-mono font-bold">
-                      Scan To Verify
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Signature Line */}
-              {config.showSignature && (
-                <div className="pt-6 flex justify-end">
-                  <div className="text-center w-40">
-                    <div className="border-b-2 border-black pb-1 mb-1" />
-                    <span className="text-[10px] uppercase text-black font-bold tracking-wider">
-                      Authorized Signature
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Footer Note */}
-              {config.footerNote && (
-                <p className="text-center text-[10px] text-neutral-600 pt-2 border-t border-black/20 font-medium">
-                  {config.footerNote}
-                </p>
-              )}
-            </div>
+              )
+            })}
           </div>
         </section>
       </div>
+
+      {/* Add Custom Column Modal */}
+      {isAddColumnModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-white/20 bg-black p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-base font-bold text-white mb-1 flex items-center gap-2">
+              <Columns className="h-4 w-4 text-white" />
+              Add Custom Column
+            </h3>
+            <p className="text-xs text-white/60 mb-4">
+              Create an extra column for serial numbers, batch codes, or custom line item notes.
+            </p>
+
+            <form onSubmit={handleAddColumn} className="flex flex-col gap-3.5">
+              <div>
+                <label className="text-xs text-white/70 block mb-1">Column Label / Header *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Batch No., HSN, Serial"
+                  value={newColumnLabel}
+                  onChange={(e) => setNewColumnLabel(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl bg-black border border-white/20 text-white text-xs focus:outline-none focus:border-white"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-white/70 block mb-1">Text Alignment</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['left', 'center', 'right'].map((align) => (
+                    <button
+                      key={align}
+                      type="button"
+                      onClick={() => setNewColumnAlign(align)}
+                      className={`h-8 rounded-lg border text-xs capitalize transition-colors ${
+                        newColumnAlign === align
+                          ? 'bg-white text-black border-white font-semibold'
+                          : 'bg-black text-white/70 border-white/20 hover:border-white/50'
+                      }`}
+                    >
+                      {align}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/20 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddColumnModalOpen(false)}
+                  className="h-9 px-4 rounded-xl border border-white/20 text-white/80 hover:bg-white/10 text-xs font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="h-9 px-4 rounded-xl bg-white text-black font-semibold text-xs hover:bg-white/90"
+                >
+                  Add Column
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

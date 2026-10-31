@@ -10,6 +10,14 @@ export const defaultInvoiceColumns = [
   { id: 'total', label: 'Total Amount', align: 'right', enabled: true, locked: true },
 ]
 
+export const defaultSectionOrder = [
+  'header',
+  'billTo',
+  'itemsTable',
+  'totals',
+  'footer',
+]
+
 export const defaultTemplateConfig = {
   companyName: 'WeBills Retail & Cafe',
   companyAddress: '450 Innovation Parkway, Suite 100, Silicon Valley, CA 94025',
@@ -21,6 +29,7 @@ export const defaultTemplateConfig = {
   showSignature: true,
   showQrCode: true,
   columns: defaultInvoiceColumns,
+  sectionOrder: defaultSectionOrder,
   termsAndConditions:
     '1. Goods once sold can be returned within 7 days in original condition.\n2. Invoices are computer generated and valid without physical seal.',
   footerNote: 'Thank you for your business! Please visit us again.',
@@ -36,6 +45,7 @@ export const getStoredTemplateConfig = () => {
       ...defaultTemplateConfig,
       ...parsed,
       columns: Array.isArray(parsed.columns) && parsed.columns.length > 0 ? parsed.columns : defaultInvoiceColumns,
+      sectionOrder: Array.isArray(parsed.sectionOrder) && parsed.sectionOrder.length > 0 ? parsed.sectionOrder : defaultSectionOrder,
     }
   } catch {
     return defaultTemplateConfig
