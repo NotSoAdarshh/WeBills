@@ -544,7 +544,7 @@ export default function PdfCustomiser() {
   }
 
   return (
-    <div className="w-full flex flex-col font-sans select-none">
+    <div className="w-full flex flex-col font-sans select-none min-h-screen">
       {/* Page Header */}
       <header className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/20 pb-4">
         <div>
@@ -585,10 +585,10 @@ export default function PdfCustomiser() {
         </div>
       )}
 
-      {/* Split Screen Layout: 50% Configurator Form / 50% Live Sticky Preview */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT CONFIGURATION PANEL (50% => col-span-6) */}
-        <section className="lg:col-span-6 flex flex-col gap-6">
+      {/* Split Screen Layout: Left scrollable config / Right sticky PDF preview */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
+        {/* LEFT CONFIGURATION PANEL — scrolls independently */}
+        <section className="lg:col-span-6 flex flex-col gap-6 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] lg:pr-1">
           {/* Section 1: Store Profile & Branding */}
           <div className="rounded-2xl border border-white/20 bg-black p-5 flex flex-col gap-4">
             <h2 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2 pb-2 border-b border-white/10">
@@ -886,8 +886,8 @@ export default function PdfCustomiser() {
           </div>
         </section>
 
-        {/* RIGHT PREVIEW PANEL (Interactive Drag-and-Drop Canvas) */}
-        <section className="lg:col-span-6 sticky top-6">
+        {/* RIGHT PREVIEW PANEL — sticky, does NOT scroll with the page */}
+        <section className="lg:col-span-6 lg:sticky lg:top-6">
           <div className="flex items-center justify-between mb-3 px-1">
             <span className="text-xs uppercase font-semibold tracking-wider text-white/70 flex items-center gap-1.5">
               <FileText className="h-4 w-4 text-white" />
