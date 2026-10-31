@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import {
     ShoppingBag,
     PackagePlus,
@@ -15,49 +16,58 @@ import {
 const navItems = [
     {
         id: 'billing',
+        path: '/',
         label: 'Billing Terminal',
         icon: ShoppingBag,
     },
     {
         id: 'inventory',
+        path: '/inventory',
         label: 'Items & Inventory',
         icon: PackagePlus,
     },
     {
         id: 'customers',
+        path: '/customers',
         label: 'Customers',
         icon: Users,
     },
     {
         id: 'customer-history',
+        path: '/customer-history',
         label: 'Customer History',
         icon: UserCheck,
     },
     {
         id: 'billed-items',
+        path: '/billed-items',
         label: 'Billed Items Log',
         icon: ListFilter,
     },
     {
         id: 'billing-logs',
+        path: '/billing-logs',
         label: 'Master Billing Logs',
         icon: FileText,
     },
     {
         id: 'pdf-customizer',
+        path: '/pdf-customizer',
         label: 'PDF Customizer',
         icon: Palette,
     },
 ]
 
 export default function Sidebar({
-    activeTab = 'billing',
+    activeTab,
     onSelectTab,
     isCollapsed: controlledCollapsed,
     onToggleCollapse,
 }) {
     const [internalCollapsed, setInternalCollapsed] = useState(false)
     const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed
+    const location = useLocation()
+    const currentPath = location?.pathname || '/'
 
     const handleToggle = () => {
         if (onToggleCollapse) {
@@ -101,12 +111,16 @@ export default function Sidebar({
                 <nav className="flex flex-col gap-1.5" role="menu">
                     {navItems.map((item) => {
                         const Icon = item.icon
-                        const isActive = activeTab === item.id
+                        
+                        // Strict check: Prioritize activeTab prop if provided, otherwise check React Router location path
+                        const isActive = activeTab 
+                            ? activeTab === item.id 
+                            : currentPath === item.path
 
                         return (
-                            <button
+                            <Link
                                 key={item.id}
-                                type="button"
+                                to={item.path}
                                 onClick={() => onSelectTab && onSelectTab(item.id)}
                                 title={isCollapsed ? item.label : undefined}
                                 className={`group relative flex items-center rounded-xl font-medium transition-all duration-200 outline-none ${
@@ -138,7 +152,7 @@ export default function Sidebar({
                                         {item.label}
                                     </span>
                                 )}
-                            </button>
+                            </Link>
                         )
                     })}
                 </nav>
@@ -146,7 +160,6 @@ export default function Sidebar({
 
             {/* Bottom Section: User Profile & Collapse/Expand Button */}
             <div className="pt-3 border-t border-white/20 flex flex-col gap-2">
-                {/* User Avatar & Name */}
                 <div
                     className={`flex items-center rounded-xl p-1.5 transition-colors ${
                         isCollapsed ? 'justify-center' : 'gap-3'
@@ -192,4 +205,5 @@ export default function Sidebar({
         </aside>
     )
 }
+
 export { Sidebar }
