@@ -15,6 +15,12 @@ import { getStoredProducts, saveStoredProducts } from '../utils/productStorage'
 
 const categories = ['Beverages', 'Bakery', 'Groceries', 'Snacks', 'Electronics', 'Accessories', 'General']
 
+let counter = 1000
+function createNextId(prefix = 'prod') {
+  counter += 1
+  return `${prefix}_${counter}_${Date.now()}`
+}
+
 export default function ItemManagement() {
   const [products, setProducts] = useState(getStoredProducts)
   const [searchQuery, setSearchQuery] = useState('')
@@ -61,7 +67,7 @@ export default function ItemManagement() {
     setEditingProduct(null)
     setFormData({
       name: '',
-      sku: `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+      sku: createNextId('SKU'),
       category: 'General',
       price: '',
       stock: '10',
@@ -94,7 +100,7 @@ export default function ItemManagement() {
   const handleSubmit = (e) => {
     e.preventDefault()
     const name = formData.name.trim()
-    const sku = formData.sku.trim() || `SKU-${Date.now().toString().slice(-4)}`
+    const sku = formData.sku.trim() || createNextId('SKU')
     const category = formData.category || 'General'
     const price = Math.max(0, parseFloat(formData.price) || 0)
     const stock = Math.max(0, parseInt(formData.stock, 10) || 0)
@@ -111,7 +117,7 @@ export default function ItemManagement() {
       showNotification(`Item "${name}" updated successfully`)
     } else {
       const newItem = {
-        id: `prod_${Date.now()}`,
+        id: createNextId('prod'),
         name,
         sku,
         category,

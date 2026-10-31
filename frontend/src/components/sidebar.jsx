@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
     ShoppingBag,
+    PackagePlus,
     Users,
     UserCheck,
     ListFilter,
@@ -16,6 +17,11 @@ const navItems = [
         id: 'billing',
         label: 'Billing Terminal',
         icon: ShoppingBag,
+    },
+    {
+        id: 'inventory',
+        label: 'Items & Inventory',
+        icon: PackagePlus,
     },
     {
         id: 'customers',
@@ -44,8 +50,22 @@ const navItems = [
     },
 ]
 
-export default function Sidebar({ activeTab = 'billing', onSelectTab }) {
-    const [isCollapsed, setIsCollapsed] = useState(false)
+export default function Sidebar({
+    activeTab = 'billing',
+    onSelectTab,
+    isCollapsed: controlledCollapsed,
+    onToggleCollapse,
+}) {
+    const [internalCollapsed, setInternalCollapsed] = useState(false)
+    const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed
+
+    const handleToggle = () => {
+        if (onToggleCollapse) {
+            onToggleCollapse(!isCollapsed)
+        } else {
+            setInternalCollapsed(!isCollapsed)
+        }
+    }
 
     return (
         <aside
@@ -150,7 +170,7 @@ export default function Sidebar({ activeTab = 'billing', onSelectTab }) {
 
                 <button
                     type="button"
-                    onClick={() => setIsCollapsed(!isCollapsed)}
+                    onClick={handleToggle}
                     title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                     className={`flex h-10 items-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition-all duration-200 outline-none ${
                         isCollapsed ? 'w-10 justify-center mx-auto' : 'w-full gap-3 px-3'

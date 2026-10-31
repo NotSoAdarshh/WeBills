@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Search,
   Plus,
@@ -14,20 +14,7 @@ import {
   CheckCircle2,
   Package,
 } from 'lucide-react'
-
-// Initial Product Catalog matching System & UI requirements
-const initialProducts = [
-  { id: 'p1', name: 'Premium Coffee Beans', sku: 'BEV-001', category: 'Beverages', price: 18.5, stock: 45 },
-  { id: 'p2', name: 'Organic Almond Milk', sku: 'BEV-002', category: 'Beverages', price: 4.75, stock: 28 },
-  { id: 'p3', name: 'Artisan Sourdough Loaf', sku: 'BAK-001', category: 'Bakery', price: 6.2, stock: 15 },
-  { id: 'p4', name: 'Croissant Butter Fresh', sku: 'BAK-002', category: 'Bakery', price: 3.5, stock: 32 },
-  { id: 'p5', name: 'Extra Virgin Olive Oil', sku: 'GRO-001', category: 'Groceries', price: 14.99, stock: 20 },
-  { id: 'p6', name: 'Dark Chocolate 85%', sku: 'SNK-001', category: 'Snacks', price: 5.25, stock: 60 },
-  { id: 'p7', name: 'Organic Green Tea (50 bags)', sku: 'BEV-003', category: 'Beverages', price: 9.9, stock: 35 },
-  { id: 'p8', name: 'Himalayan Pink Salt 500g', sku: 'GRO-002', category: 'Groceries', price: 3.8, stock: 50 },
-  { id: 'p9', name: 'Wireless Barcode Scanner', sku: 'ELE-001', category: 'Electronics', price: 49.0, stock: 8 },
-  { id: 'p10', name: 'Receipt Thermal Paper Roll (5pk)', sku: 'ACC-001', category: 'Accessories', price: 12.0, stock: 40 },
-]
+import { getStoredProducts, saveStoredProducts } from '../utils/productStorage'
 
 // Pre-registered customers
 const initialCustomers = [
@@ -37,14 +24,31 @@ const initialCustomers = [
   { id: 'c4', name: 'Elena Rostova', phone: '+1 (555) 349-2104', taxId: 'TX-67290', points: 580 },
 ]
 
-const categories = ['All', 'Beverages', 'Bakery', 'Groceries', 'Snacks', 'Electronics', 'Accessories']
-
 export default function BillingTerminal() {
-  const [products] = useState(initialProducts)
+  const [products, setProducts] = useState(getStoredProducts)
   const [customers, setCustomers] = useState(initialCustomers)
   const [selectedCustomerId, setSelectedCustomerId] = useState('c1')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Dynamically sync products if updated elsewhere or added by user
+  useEffect(() => {
+    const handleProductsChange = () => {
+      setProducts(getStoredProducts())
+    }
+    window.addEventListener('webills_products_updated', handleProductsChange)
+    window.addEventListener('storage', handleProductsChange)
+    return () => {
+      window.removeEventListener('webills_products_updated', handleProductsChange)
+      window.removeEventListener('storage', handleProductsChange)
+    }
+  }, [])
+
+  // Dynamic categories computed from the user's current items
+  const categories = useMemo(() => {
+    const unique = new Set(products.map((p) => p.category).filter(Boolean))
+    return ['All', ...Array.from(unique)]
+  }, [products])
 
   // Cart State
   const [cart, setCart] = useState([])
@@ -161,6 +165,16 @@ export default function BillingTerminal() {
   const handlePrintReceipt = () => {
     if (cart.length === 0) return
     const billNo = `BILL-${Math.floor(100000 + Math.random() * 900000)}`
+    
+    // Deduct stock permanently
+    const currentProducts = getStoredProducts()
+    const updatedProducts = currentProducts.map((p) => {
+      const purchased = cart.find((item) => item.id === p.id)
+      return purchased ? { ...p, stock: Math.max(0, p.stock - purchased.quantity) } : p
+    })
+    saveStoredProducts(updatedProducts)
+    setProducts(updatedProducts)
+
     setSuccessMessage({
       type: 'Print & Direct ESC/POS',
       billNo,
@@ -174,6 +188,16 @@ export default function BillingTerminal() {
   const handleExportPDF = () => {
     if (cart.length === 0) return
     const billNo = `BILL-${Math.floor(100000 + Math.random() * 900000)}`
+
+    // Deduct stock permanently
+    const currentProducts = getStoredProducts()
+    const updatedProducts = currentProducts.map((p) => {
+      const purchased = cart.find((item) => item.id === p.id)
+      return purchased ? { ...p, stock: Math.max(0, p.stock - purchased.quantity) } : p
+    })
+    saveStoredProducts(updatedProducts)
+    setProducts(updatedProducts)
+
     setSuccessMessage({
       type: 'PDF Invoice Generated & Downloaded',
       billNo,
