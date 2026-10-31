@@ -77,19 +77,27 @@ export default function Sidebar({
         }
     }
 
+    // On mobile (< md), clicking a nav item always collapses the sidebar
+    const handleNavClick = (itemId) => {
+        if (onSelectTab) onSelectTab(itemId)
+        // Collapse on small screens after navigation
+        if (window.innerWidth < 768) {
+            if (onToggleCollapse) onToggleCollapse(true)
+            else setInternalCollapsed(true)
+        }
+    }
+
     return (
         <aside
-            className={`fixed top-4 left-4 bottom-4 z-40 flex flex-col justify-between rounded-2xl border border-white/20 bg-black p-3.5 transition-all duration-300 ease-in-out select-none ${
-                isCollapsed ? 'w-[72px]' : 'w-[260px]'
-            }`}
+            className={`fixed top-4 left-4 bottom-4 z-40 flex flex-col justify-between rounded-2xl border border-white/20 bg-black p-3.5 transition-all duration-300 ease-in-out select-none ${isCollapsed ? 'w-[72px]' : 'w-[260px]'
+                }`}
             aria-label="Sidebar navigation"
         >
             {/* Top Branding Header */}
             <div>
                 <div
-                    className={`flex items-center gap-3 px-2 py-2.5 mb-5 rounded-xl border border-transparent ${
-                        isCollapsed ? 'justify-center px-0' : ''
-                    }`}
+                    className={`flex items-center gap-3 px-2 py-2.5 mb-5 rounded-xl border border-transparent ${isCollapsed ? 'justify-center px-0' : ''
+                        }`}
                 >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-black">
                         <ReceiptText className="h-5 w-5" />
@@ -111,10 +119,10 @@ export default function Sidebar({
                 <nav className="flex flex-col gap-1.5" role="menu">
                     {navItems.map((item) => {
                         const Icon = item.icon
-                        
+
                         // Strict check: Prioritize activeTab prop if provided, otherwise check React Router location path
-                        const isActive = activeTab 
-                            ? activeTab === item.id 
+                        const isActive = activeTab
+                            ? activeTab === item.id
                             : currentPath === item.path
 
                         return (
@@ -123,21 +131,18 @@ export default function Sidebar({
                                 to={item.path}
                                 onClick={() => onSelectTab && onSelectTab(item.id)}
                                 title={isCollapsed ? item.label : undefined}
-                                className={`group relative flex items-center rounded-xl font-medium transition-all duration-200 outline-none ${
-                                    isCollapsed
-                                        ? 'h-11 w-11 justify-center mx-auto'
-                                        : 'h-11 w-full gap-3 px-3'
-                                } ${
-                                    isActive
+                                className={`group relative flex items-center rounded-xl font-medium transition-all duration-200 outline-none ${isCollapsed
+                                    ? 'h-11 w-11 justify-center mx-auto'
+                                    : 'h-11 w-full gap-3 px-3'
+                                    } ${isActive
                                         ? 'bg-white text-black font-semibold'
                                         : 'text-white/80 hover:bg-white/10 hover:text-white'
-                                }`}
+                                    }`}
                                 role="menuitem"
                             >
                                 <Icon
-                                    className={`h-5 w-5 shrink-0 transition-transform duration-200 group-hover:scale-105 ${
-                                        isActive ? 'text-black' : 'text-white/80 group-hover:text-white'
-                                    }`}
+                                    className={`h-5 w-5 shrink-0 transition-transform duration-200 group-hover:scale-105 ${isActive ? 'text-black' : 'text-white/80 group-hover:text-white'
+                                        }`}
                                 />
 
                                 {!isCollapsed && (
@@ -161,9 +166,8 @@ export default function Sidebar({
             {/* Bottom Section: User Profile & Collapse/Expand Button */}
             <div className="pt-3 border-t border-white/20 flex flex-col gap-2">
                 <div
-                    className={`flex items-center rounded-xl p-1.5 transition-colors ${
-                        isCollapsed ? 'justify-center' : 'gap-3'
-                    }`}
+                    className={`flex items-center rounded-xl p-1.5 transition-colors ${isCollapsed ? 'justify-center' : 'gap-3'
+                        }`}
                     title={isCollapsed ? 'Adarsh Deshmukh' : undefined}
                 >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black font-semibold text-xs border border-white/40 shadow-sm">
@@ -185,9 +189,8 @@ export default function Sidebar({
                     type="button"
                     onClick={handleToggle}
                     title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                    className={`flex h-10 items-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition-all duration-200 outline-none ${
-                        isCollapsed ? 'w-10 justify-center mx-auto' : 'w-full gap-3 px-3'
-                    }`}
+                    className={`flex h-10 items-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition-all duration-200 outline-none ${isCollapsed ? 'w-10 justify-center mx-auto' : 'w-full gap-3 px-3'
+                        }`}
                     aria-expanded={!isCollapsed}
                 >
                     {isCollapsed ? (

@@ -5,6 +5,8 @@ import ItemManagement from './pages/itemManagement'
 import CustomerManagement from './pages/customerManagement'
 import CustomerHistory from './pages/customerHistory'
 import PdfCustomiser from './pages/pdfCustomiser'
+import BilledItemsLog from './pages/billedItemsLog'
+import MasterBillingLogs from './pages/masterBillingLogs'
 
 function App() {
   const [activeTab, setActiveTab] = useState('billing')
@@ -31,11 +33,15 @@ function App() {
       />
 
       {/* Responsive Main Content Layout adjusting dynamically to Collapsed vs Open Sidebar */}
+      {/* Sidebar geometry: left-4 (16px) + width + 16px gap
+           Collapsed : 16 + 72  + 16 = 104px
+           Expanded  : 16 + 260 + 16 = 292px
+           pl-[292px] has NO breakpoint prefix — sidebar is always 260px wide when expanded */}
       <main
-        className={`flex-1 min-w-0 transition-all duration-300 ease-in-out p-4 md:p-6 lg:p-8 ${
+        className={`flex-1 min-w-0 transition-all duration-300 ease-in-out pt-4 pr-4 pb-4 md:pt-6 md:pr-6 md:pb-6 lg:pt-8 lg:pr-8 lg:pb-8 ${
           isCollapsed
-            ? 'pl-[96px] md:pl-[104px]'
-            : 'pl-[96px] md:pl-[292px]'
+            ? 'pl-[104px]'
+            : 'pl-[292px]'
         }`}
       >
         <div className="w-full max-w-[1600px] mx-auto">
@@ -50,19 +56,9 @@ function App() {
           {activeTab === 'customer-history' && (
             <CustomerHistory selectedCustomerIdProp={selectedCustomerIdForHistory} />
           )}
+          {activeTab === 'billed-items' && <BilledItemsLog />}
+          {activeTab === 'billing-logs' && <MasterBillingLogs />}
           {activeTab === 'pdf-customizer' && <PdfCustomiser />}
-          {activeTab !== 'billing' &&
-            activeTab !== 'inventory' &&
-            activeTab !== 'customers' &&
-            activeTab !== 'customer-history' &&
-            activeTab !== 'pdf-customizer' && (
-              <div className="p-8 text-center border border-white/20 rounded-2xl bg-black my-8">
-                <h2 className="text-xl font-bold text-white mb-2 capitalize">
-                  {activeTab.replace('-', ' ')}
-                </h2>
-                <p className="text-sm text-white/60">Module view coming up next.</p>
-              </div>
-            )}
         </div>
       </main>
     </div>
