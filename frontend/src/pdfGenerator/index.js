@@ -16,6 +16,7 @@ import {
  * @param {string} options.filename - Custom filename (default: invoice-{number}.pdf)
  * @returns {jsPDF} The generated PDF document
  */
+
 // Module-level helper functions (need access to doc, so they accept doc as first param)
 const addText = (doc, text, x, y, options = {}) => {
   const {
@@ -33,11 +34,12 @@ const addText = (doc, text, x, y, options = {}) => {
   if (maxWidth) {
     const lines = doc.splitTextToSize(text, maxWidth)
     doc.text(lines, x, y, { align })
-    return y + lines.length * (fontSize * 0.35)
+    // Line height in mm: fontSize (pt) * 0.352778 * 1.15 (line height factor)
+    return y + lines.length * (fontSize * 0.4)
   }
 
   doc.text(text, x, y, { align })
-  return y + fontSize * 0.35
+  return y + fontSize * 0.4
 }
 
 const addLine = (doc, x1, y1, x2, y2, color = [0, 0, 0], width = 0.5) => {
@@ -88,61 +90,61 @@ export const generateInvoicePDF = (invoiceData, options = {}) => {
     let yPos = margin
 
     // Render each section based on sectionOrder
-  sectionOrder.forEach((sectionKey) => {
-    const elements = sectionElements[sectionKey] || []
+    sectionOrder.forEach((sectionKey) => {
+      const elements = sectionElements[sectionKey] || []
 
-    switch (sectionKey) {
-      case 'header':
-        yPos = renderHeader(doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth)
-        break
-      case 'billTo':
-        yPos = renderBillTo(doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth)
-        break
-      case 'itemsTable':
-        yPos = renderItemsTable(doc, config, invoiceData, margin, contentWidth, yPos, activeColumns)
-        break
-      case 'totals':
-        yPos = renderTotals(doc, config, invoiceData, margin, contentWidth, yPos, elements)
-        break
-      case 'footer':
-        yPos = renderFooter(doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth, pageHeight)
-        break
+      switch (sectionKey) {
+        case 'header':
+          yPos = renderHeader(doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth)
+          break
+        case 'billTo':
+          yPos = renderBillTo(doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth)
+          break
+        case 'itemsTable':
+          yPos = renderItemsTable(doc, config, invoiceData, margin, contentWidth, yPos, activeColumns)
+          break
+        case 'totals':
+          yPos = renderTotals(doc, config, invoiceData, margin, contentWidth, yPos, elements)
+          break
+        case 'footer':
+          yPos = renderFooter(doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth, pageHeight)
+          break
+      }
+
+      // Add small gap between sections
+      yPos += 3
+
+      // Check if we need a new page
+      if (yPos > pageHeight - 30) {
+        doc.addPage()
+        yPos = margin
+      }
+    })
+
+    // Download or return the PDF
+    if (download) {
+      doc.save(filename)
     }
 
-    // Add small gap between sections
-    yPos += 3
-
-    // Check if we need a new page
-    if (yPos > pageHeight - 30) {
-      doc.addPage()
-      yPos = margin
-    }
-  })
-
-  // Download or return the PDF
-  if (download) {
-    doc.save(filename)
-  }
-
-  return doc
+    return doc
   } catch (error) {
-  console.error('PDF Generation Error:', error)
-  // Return a minimal PDF with error message
-  const errorDoc = new jsPDF()
-  errorDoc.setFont('helvetica')
-  errorDoc.setFontSize(12)
-  errorDoc.text('Error generating PDF invoice', 20, 20)
-  errorDoc.text(error.message || 'Unknown error', 20, 30)
-  if (download) {
-    errorDoc.save(filename)
+    console.error('PDF Generation Error:', error)
+    // Return a minimal PDF with error message
+    const errorDoc = new jsPDF()
+    errorDoc.setFont('helvetica')
+    errorDoc.setFontSize(12)
+    errorDoc.text('Error generating PDF invoice', 20, 20)
+    errorDoc.text(error.message || 'Unknown error', 20, 30)
+    if (download) {
+      errorDoc.save(filename)
+    }
+    return errorDoc
   }
-  return errorDoc
-}
-
 }
 
 /**
  * Render Header Section
+ * Layout: Left side (logo + company info) side by side horizontally, Right side (invoice details) stacked vertically right-aligned
  */
 const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth) => {
   const leftX = margin
@@ -153,14 +155,18 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
   const leftElements = elements.filter((k) => ['logo', 'companyName', 'companyAddress', 'companyContact'].includes(k))
   const rightElements = elements.filter((k) => ['invoiceTitle', 'invoiceNumber', 'invoiceDate', 'gstNumber'].includes(k))
 
-  // Render left group elements
+  // Render left group elements side by side horizontally (like flex items-center gap-3)
+  // Start with logo at leftX, then company info to the right of logo
+  let logoBottomY = currentY
+  let companyInfoX = leftX
+
   leftElements.forEach((elementKey) => {
     switch (elementKey) {
       case 'logo':
         if (config.logoDataUrl) {
           try {
             doc.addImage(config.logoDataUrl, 'PNG', leftX, currentY, 20, 20)
-            currentY += 22
+            logoBottomY = currentY + 22
           } catch (e) {
             // Fallback if image fails
             doc.setFillColor(0, 0, 0)
@@ -169,7 +175,7 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
             doc.setFontSize(10)
             doc.setFont('helvetica', 'bold')
             doc.text('WB', leftX + 10, currentY + 14, { align: 'center' })
-            currentY += 22
+            logoBottomY = currentY + 22
           }
         } else {
           // Default logo placeholder
@@ -179,19 +185,21 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
           doc.setFontSize(10)
           doc.setFont('helvetica', 'bold')
           doc.text('WB', leftX + 10, currentY + 14, { align: 'center' })
-          currentY += 22
+          logoBottomY = currentY + 22
         }
+        companyInfoX = leftX + 25 // Company info starts to the right of logo
         break
 
       case 'companyName':
-        currentY = addText(doc, config.companyName || 'Store Name', leftX + 25, currentY, {
+        // Company name goes to the right of logo, at the same Y as logo top
+        currentY = addText(doc, config.companyName || 'Store Name', companyInfoX, currentY, {
           fontSize: 11,
           fontStyle: 'bold',
         })
         break
 
       case 'companyAddress':
-        currentY = addText(doc, config.companyAddress, leftX + 25, currentY, {
+        currentY = addText(doc, config.companyAddress, companyInfoX, currentY, {
           fontSize: 7,
           color: [80, 80, 80],
           maxWidth: contentWidth - 30,
@@ -199,7 +207,7 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
         break
 
       case 'companyContact':
-        currentY = addText(doc, config.companyContact, leftX + 25, currentY, {
+        currentY = addText(doc, config.companyContact, companyInfoX, currentY, {
           fontSize: 6.5,
           color: [100, 100, 100],
         })
@@ -207,7 +215,10 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
     }
   })
 
-  // Render right group elements
+  // The left column height is the max of logo bottom and company info bottom
+  const leftColumnBottomY = Math.max(logoBottomY, currentY)
+
+  // Render right group elements - stacked vertically, right-aligned
   let rightY = yPos
   rightElements.forEach((elementKey) => {
     switch (elementKey) {
@@ -249,8 +260,8 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
     }
   })
 
-  // Draw bottom border
-  const maxY = Math.max(currentY, rightY)
+  // Draw bottom border at the max of left and right columns
+  const maxY = Math.max(leftColumnBottomY, rightY)
   addLine(doc, margin, maxY + 2, pageWidth - margin, maxY + 2, [0, 0, 0], 0.8)
 
   return maxY + 5
@@ -258,11 +269,13 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
 
 /**
  * Render Bill To Section
+ * Layout: Two columns side by side (grid 2 cols)
+ * Left: Billed To info, Right: Payment Status
  */
 const renderBillTo = (doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth) => {
   let currentY = yPos
   const leftColX = margin
-  const rightColX = margin + contentWidth / 2 + 5
+  const rightColX = pageWidth - margin // Right aligned to page edge
   const colWidth = contentWidth / 2 - 10
 
   // Left column: Billed To
@@ -306,7 +319,7 @@ const renderBillTo = (doc, config, invoiceData, margin, contentWidth, yPos, elem
     }
   })
 
-  // Right column: Payment Status
+  // Right column: Payment Status (right aligned)
   const rightElements = elements.filter((k) => ['paymentStatusLabel', 'paymentStatus', 'paymentMode'].includes(k))
   let rightY = currentY
 
@@ -323,13 +336,14 @@ const renderBillTo = (doc, config, invoiceData, margin, contentWidth, yPos, elem
 
       case 'paymentStatus':
         const status = invoiceData.paymentStatus || 'PAID IN FULL'
-        // Draw status badge
+        // Draw status badge - right aligned
         doc.setFillColor(0, 0, 0)
         doc.setTextColor(255, 255, 255)
         doc.setFontSize(7)
         doc.setFont('helvetica', 'bold')
         const textWidth = doc.getTextWidth(status) + 4
-        doc.roundedRect(rightColX - textWidth, rightY - 3, textWidth, 6, 1, 1, 'F')
+        const badgeX = rightColX - textWidth
+        doc.roundedRect(badgeX, rightY - 3, textWidth, 6, 1, 1, 'F')
         doc.text(status, rightColX - 2, rightY + 1, { align: 'right' })
         doc.setTextColor(0, 0, 0)
         rightY += 8
@@ -407,7 +421,8 @@ const renderItemsTable = (doc, config, invoiceData, margin, contentWidth, yPos, 
   })
 
   // Use autoTable for the items table
-  autoTable(doc, {
+  let finalTableY = currentY
+  const tableResult = autoTable(doc, {
     startY: currentY,
     head: [head],
     body: body,
@@ -434,51 +449,61 @@ const renderItemsTable = (doc, config, invoiceData, margin, contentWidth, yPos, 
     columnStyles: columnStyles,
     tableWidth: 'auto',
     didDrawPage: (data) => {
-      currentY = data.cursor.y
+      finalTableY = data.cursor.y
     },
   })
+
+  // Get the final Y position from autoTable (supports multiple API versions)
+  currentY = tableResult?.lastAutoTable?.finalY ?? finalTableY ?? currentY
 
   return currentY + 3
 }
 
 /**
  * Render Totals Section
+ * Layout: Right-aligned column (flex-col items-end)
  */
 const renderTotals = (doc, config, invoiceData, margin, contentWidth, yPos, elements) => {
   let currentY = yPos
   const totalsX = margin + contentWidth - 60 // Right aligned
+  const labelX = totalsX
+  const valueX = totalsX + 55
 
   elements.forEach((elementKey) => {
     switch (elementKey) {
       case 'subtotal':
-        currentY = addText(doc, 'Subtotal:', totalsX, currentY, { fontSize: 7, align: 'left' })
-        currentY = addText(doc, `$${(invoiceData.subtotal || 51.70).toFixed(2)}`, totalsX + 55, currentY - 3.5, {
+        // Draw label and value on same line
+        addText(doc, 'Subtotal:', labelX, currentY, { fontSize: 7, align: 'left' })
+        addText(doc, `$${(invoiceData.subtotal || 51.70).toFixed(2)}`, valueX, currentY, {
           fontSize: 7,
           fontStyle: 'bold',
           align: 'right',
         })
+        currentY += 5
         break
 
       case 'taxBreakdown':
         if (config.showTaxBreakdown) {
-          currentY = addText(doc, 'Tax / GST (8.5%):', totalsX, currentY, { fontSize: 6.5, color: [80, 80, 80], align: 'left' })
-          currentY = addText(doc, `+$${(invoiceData.tax || 4.39).toFixed(2)}`, totalsX + 55, currentY - 3.5, {
+          addText(doc, 'Tax / GST (8.5%):', labelX, currentY, { fontSize: 6.5, color: [80, 80, 80], align: 'left' })
+          addText(doc, `+$${(invoiceData.tax || 4.39).toFixed(2)}`, valueX, currentY, {
             fontSize: 6.5,
             align: 'right',
           })
+          currentY += 5
         }
         break
 
       case 'grandTotal':
         // Draw line
         addLine(doc, totalsX, currentY, totalsX + 60, currentY, [0, 0, 0], 0.5)
-        currentY += 2
-        currentY = addText(doc, 'Grand Total:', totalsX, currentY, { fontSize: 8, fontStyle: 'bold', align: 'left' })
-        currentY = addText(doc, `$${(invoiceData.grandTotal || 56.09).toFixed(2)}`, totalsX + 55, currentY - 4, {
+        currentY += 3
+        addText(doc, 'Grand Total:', labelX, currentY, { fontSize: 8, fontStyle: 'bold', align: 'left' })
+        addText(doc, `$${(invoiceData.grandTotal || 56.09).toFixed(2)}`, valueX, currentY, {
           fontSize: 9,
           fontStyle: 'bold',
           align: 'right',
         })
+        currentY += 6
         break
     }
   })
@@ -488,6 +513,10 @@ const renderTotals = (doc, config, invoiceData, margin, contentWidth, yPos, elem
 
 /**
  * Render Footer Section
+ * Layout: 
+ * - Top row: Terms (left) and QR Code (right) side by side
+ * - Signature: right-aligned
+ * - Footer note: centered
  */
 const renderFooter = (doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth, pageHeight) => {
   let currentY = yPos
@@ -498,25 +527,28 @@ const renderFooter = (doc, config, invoiceData, margin, contentWidth, yPos, elem
 
   const leftColX = margin
   const rightColX = margin + contentWidth / 2 + 5
+  const colWidth = contentWidth / 2 - 15
 
-  // Terms and QR Code (side by side)
+  // Terms and QR Code (side by side - flex items-start justify-between gap-4)
   const topElements = elements.filter((k) => ['terms', 'qrCode'].includes(k))
+  let termsEndY = currentY
+  let qrEndY = currentY
 
   if (topElements.includes('terms') && config.showTerms) {
-    currentY = addText(doc, 'TERMS & CONDITIONS', leftColX, currentY, {
+    termsEndY = addText(doc, 'TERMS & CONDITIONS', leftColX, currentY, {
       fontSize: 6,
       fontStyle: 'bold',
       color: [100, 100, 100],
     })
-    currentY = addText(doc, config.termsAndConditions, leftColX, currentY, {
+    termsEndY = addText(doc, config.termsAndConditions, leftColX, termsEndY, {
       fontSize: 6,
       color: [80, 80, 80],
-      maxWidth: contentWidth / 2 - 15,
+      maxWidth: colWidth,
     })
   }
 
   if (topElements.includes('qrCode') && config.showQrCode) {
-    let qrY = yPos + 4
+    let qrY = currentY
     const qrSize = 25
 
     if (config.qrCodeDataUrl) {
@@ -539,37 +571,42 @@ const renderFooter = (doc, config, invoiceData, margin, contentWidth, yPos, elem
       doc.text('QR', rightColX + qrSize / 2, qrY + qrSize / 2 + 1.5, { align: 'center' })
     }
 
+    qrY += qrSize + 2
+
     if (config.showQrCodeText) {
-      qrY = addText(doc, 'Scan to Pay with UPI', rightColX + qrSize / 2, qrY + qrSize + 2, {
+      qrY = addText(doc, 'Scan to Pay with UPI', rightColX + qrSize / 2, qrY, {
         fontSize: 5,
         fontStyle: 'bold',
         align: 'center',
         color: [80, 80, 80],
       })
     } else if (!config.qrCodeDataUrl) {
-      qrY = addText(doc, 'Scan To Verify', rightColX + qrSize / 2, qrY + qrSize + 2, {
+      qrY = addText(doc, 'Scan To Verify', rightColX + qrSize / 2, qrY, {
         fontSize: 5,
         fontStyle: 'bold',
         align: 'center',
         color: [80, 80, 80],
       })
     }
-    // Note: QR code is positioned absolutely, so we don't update currentY from it
+    qrEndY = qrY
   }
 
-  // Signature
+  // Move currentY to the max of terms and QR code
+  currentY = Math.max(termsEndY, qrEndY) + 5
+
+  // Signature (right-aligned)
   if (elements.includes('signature') && config.showSignature) {
-    const sigY = currentY + 15
+    const sigY = currentY + 10
     addLine(doc, rightColX + 20, sigY, rightColX + 80, sigY, [0, 0, 0], 0.5)
     addText(doc, 'Authorized Signature', rightColX + 50, sigY + 3, {
       fontSize: 6,
       fontStyle: 'bold',
       align: 'center',
     })
-    currentY = sigY + 5
+    currentY = sigY + 8
   }
 
-  // Footer Note
+  // Footer Note (centered)
   if (elements.includes('footerNote') && config.footerNote) {
     currentY += 5
     addLine(doc, margin, currentY, pageWidth - margin, currentY, [0, 0, 0], 0.3)
