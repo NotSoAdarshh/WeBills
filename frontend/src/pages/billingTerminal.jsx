@@ -15,6 +15,7 @@ import {
   Package,
 } from 'lucide-react'
 import { getStoredProducts, saveStoredProducts } from '../utils/productStorage'
+import { generateInvoicePDF } from '../pdfGenerator'
 
 // Pre-registered customers
 const initialCustomers = [
@@ -165,7 +166,32 @@ export default function BillingTerminal() {
   const handlePrintReceipt = () => {
     if (cart.length === 0) return
     const billNo = `BILL-${Math.floor(100000 + Math.random() * 900000)}`
-    
+    const invoiceDate = new Date().toISOString()
+
+    // Prepare invoice data from cart
+    const invoiceData = {
+      invoiceNumber: billNo,
+      date: invoiceDate,
+      customerName: selectedCustomer.name,
+      customerPhone: selectedCustomer.phone !== 'N/A' ? selectedCustomer.phone : undefined,
+      customerTaxId: selectedCustomer.taxId !== 'N/A' ? selectedCustomer.taxId : undefined,
+      paymentStatus: 'PAID IN FULL',
+      paymentMode: `Mode: ${paymentMethod}`,
+      items: cart.map((item) => ({
+        item: item.name,
+        sku: item.sku,
+        qty: item.quantity,
+        price: item.price,
+        discount: '0%',
+        tax: `${taxPercent}%`,
+        total: item.price * item.quantity,
+        customVal: '—',
+      })),
+      subtotal: subtotal,
+      tax: taxAmount,
+      grandTotal: grandTotal,
+    }
+
     // Deduct stock permanently
     const currentProducts = getStoredProducts()
     const updatedProducts = currentProducts.map((p) => {
@@ -175,19 +201,61 @@ export default function BillingTerminal() {
     saveStoredProducts(updatedProducts)
     setProducts(updatedProducts)
 
-    setSuccessMessage({
-      type: 'Print & Direct ESC/POS',
-      billNo,
-      total: grandTotal.toFixed(2),
-      customer: selectedCustomer.name,
-      itemsCount: cart.reduce((acc, i) => acc + i.quantity, 0),
-    })
+    try {
+      // Generate and download PDF using the template
+      generateInvoicePDF(invoiceData, {
+        download: true,
+        filename: `invoice-${billNo}.pdf`,
+      })
+
+      setSuccessMessage({
+        type: 'PDF Invoice Generated & Printed',
+        billNo,
+        total: grandTotal.toFixed(2),
+        customer: selectedCustomer.name,
+        itemsCount: cart.reduce((acc, i) => acc + i.quantity, 0),
+      })
+    } catch (error) {
+      console.error('Print Receipt Error:', error)
+      setSuccessMessage({
+        type: 'Error generating PDF',
+        billNo,
+        total: grandTotal.toFixed(2),
+        customer: selectedCustomer.name,
+        itemsCount: cart.reduce((acc, i) => acc + i.quantity, 0),
+      })
+    }
     clearCart()
   }
 
   const handleExportPDF = () => {
     if (cart.length === 0) return
     const billNo = `BILL-${Math.floor(100000 + Math.random() * 900000)}`
+    const invoiceDate = new Date().toISOString()
+
+    // Prepare invoice data from cart
+    const invoiceData = {
+      invoiceNumber: billNo,
+      date: invoiceDate,
+      customerName: selectedCustomer.name,
+      customerPhone: selectedCustomer.phone !== 'N/A' ? selectedCustomer.phone : undefined,
+      customerTaxId: selectedCustomer.taxId !== 'N/A' ? selectedCustomer.taxId : undefined,
+      paymentStatus: 'PAID IN FULL',
+      paymentMode: `Mode: ${paymentMethod}`,
+      items: cart.map((item) => ({
+        item: item.name,
+        sku: item.sku,
+        qty: item.quantity,
+        price: item.price,
+        discount: '0%',
+        tax: `${taxPercent}%`,
+        total: item.price * item.quantity,
+        customVal: '—',
+      })),
+      subtotal: subtotal,
+      tax: taxAmount,
+      grandTotal: grandTotal,
+    }
 
     // Deduct stock permanently
     const currentProducts = getStoredProducts()
@@ -198,13 +266,30 @@ export default function BillingTerminal() {
     saveStoredProducts(updatedProducts)
     setProducts(updatedProducts)
 
-    setSuccessMessage({
-      type: 'PDF Invoice Generated & Downloaded',
-      billNo,
-      total: grandTotal.toFixed(2),
-      customer: selectedCustomer.name,
-      itemsCount: cart.reduce((acc, i) => acc + i.quantity, 0),
-    })
+    try {
+      // Generate and download PDF using the template
+      generateInvoicePDF(invoiceData, {
+        download: true,
+        filename: `invoice-${billNo}.pdf`,
+      })
+
+      setSuccessMessage({
+        type: 'PDF Invoice Generated & Downloaded',
+        billNo,
+        total: grandTotal.toFixed(2),
+        customer: selectedCustomer.name,
+        itemsCount: cart.reduce((acc, i) => acc + i.quantity, 0),
+      })
+    } catch (error) {
+      console.error('Export PDF Error:', error)
+      setSuccessMessage({
+        type: 'Error generating PDF',
+        billNo,
+        total: grandTotal.toFixed(2),
+        customer: selectedCustomer.name,
+        itemsCount: cart.reduce((acc, i) => acc + i.quantity, 0),
+      })
+    }
     clearCart()
   }
 
