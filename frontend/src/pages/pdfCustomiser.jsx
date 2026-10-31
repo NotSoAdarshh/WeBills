@@ -19,6 +19,7 @@ import {
   defaultTemplateConfig,
   defaultInvoiceColumns,
   defaultSectionOrder,
+  defaultSectionElements,
   getStoredTemplateConfig,
   saveStoredTemplateConfig,
 } from '../utils/pdfTemplateStorage'
@@ -44,6 +45,10 @@ export default function PdfCustomiser() {
   const [draggedSectionOverIndex, setDraggedSectionOverIndex] = useState(null)
   const [draggedColumnId, setDraggedColumnId] = useState(null)
   const [draggedColumnOverId, setDraggedColumnOverId] = useState(null)
+
+  // Drag and drop states for elements within sections
+  const [draggedElement, setDraggedElement] = useState(null) // { sectionKey, elementKey }
+  const [draggedElementOver, setDraggedElementOver] = useState(null) // { sectionKey, elementKey }
 
   useEffect(() => {
     const handleSync = () => {
@@ -170,6 +175,52 @@ export default function PdfCustomiser() {
     setDraggedColumnOverId(null)
   }
 
+  // --- Drag and Drop: Elements within PDF Sections ---
+  const handleElementDragStart = (sectionKey, elementKey) => {
+    setDraggedElement({ sectionKey, elementKey })
+  }
+
+  const handleElementDragOver = (e, sectionKey, elementKey) => {
+    e.preventDefault()
+    if (draggedElement && (draggedElement.sectionKey !== sectionKey || draggedElement.elementKey !== elementKey)) {
+      setDraggedElementOver({ sectionKey, elementKey })
+    }
+  }
+
+  const handleElementDrop = (targetSectionKey, targetElementKey) => {
+    if (!draggedElement || (draggedElement.sectionKey === targetSectionKey && draggedElement.elementKey === targetElementKey)) {
+      setDraggedElement(null)
+      setDraggedElementOver(null)
+      return
+    }
+
+    // Only allow reordering within the same section
+    if (draggedElement.sectionKey !== targetSectionKey) {
+      setDraggedElement(null)
+      setDraggedElementOver(null)
+      return
+    }
+
+    const currentElements = [...(config.sectionElements?.[targetSectionKey] || defaultSectionElements[targetSectionKey] || [])]
+    const sourceIdx = currentElements.findIndex((k) => k === draggedElement.elementKey)
+    const targetIdx = currentElements.findIndex((k) => k === targetElementKey)
+
+    if (sourceIdx !== -1 && targetIdx !== -1) {
+      const [movedElement] = currentElements.splice(sourceIdx, 1)
+      currentElements.splice(targetIdx, 0, movedElement)
+
+      const updatedSectionElements = {
+        ...(config.sectionElements || defaultSectionElements),
+        [targetSectionKey]: currentElements,
+      }
+      handleChange('sectionElements', updatedSectionElements)
+      showNotification(`Reordered element in ${targetSectionKey} section`)
+    }
+
+    setDraggedElement(null)
+    setDraggedElementOver(null)
+  }
+
   // --- Drag and Drop: PDF Document Sections ---
   const handleSectionDragStart = (index) => {
     setDraggedSectionIndex(index)
@@ -219,6 +270,27 @@ export default function PdfCustomiser() {
   const handleRemoveLogo = () => {
     handleChange('logoDataUrl', '')
     showNotification('Store logo removed')
+  }
+
+  const handleQrCodeUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('File size exceeds 2MB limit.')
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = () => {
+        handleChange('qrCodeDataUrl', reader.result)
+        showNotification('Custom QR code updated')
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleRemoveQrCode = () => {
+    handleChange('qrCodeDataUrl', '')
+    showNotification('Custom QR code removed')
   }
 
   const handleResetDefaults = () => {
@@ -273,274 +345,511 @@ export default function PdfCustomiser() {
 
   // Render individual sections for drag-and-drop PDF canvas
   const renderPdfSection = (sectionKey) => {
-    switch (sectionKey) {
-      case 'header':
-        return (
-          <div key="header" className="pb-4 mb-4 flex items-start justify-between gap-4 border-b-2 border-black">
-            <div className="flex items-center gap-3">
-              {config.logoDataUrl ? (
-                <img
-                  src={config.logoDataUrl}
-                  alt="Store Logo"
-                  className="h-12 w-12 object-contain rounded-lg border border-black"
-                />
-              ) : (
-                <div className="h-12 w-12 rounded-xl bg-black text-white flex items-center justify-center font-bold text-base shadow-sm">
-                  WB
+    const sectionElements = config.sectionElements?.[sectionKey] || defaultSectionElements[sectionKey] || []
+
+    const renderElement = (elementKey, sectionKey) => {
+      const isDragging = draggedElement?.sectionKey === sectionKey && draggedElement?.elementKey === elementKey
+      const isOver = draggedElementOver?.sectionKey === sectionKey && draggedElementOver?.elementKey === elementKey
+
+      const dragProps = {
+        draggable: true,
+        onDragStart: () => handleElementDragStart(sectionKey, elementKey),
+        onDragOver: (e) => handleElementDragOver(e, sectionKey, elementKey),
+        onDrop: () => handleElementDrop(sectionKey, elementKey),
+        className: `group relative transition-all ${
+          isDragging ? 'opacity-30 border-2 border-dashed border-black' : ''
+        } ${isOver ? 'bg-neutral-100 ring-2 ring-black ring-offset-2' : ''}`,
+      }
+
+      switch (sectionKey) {
+        case 'header': {
+          switch (elementKey) {
+            case 'logo':
+              return (
+                <div key="logo" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  {config.logoDataUrl ? (
+                    <img
+                      src={config.logoDataUrl}
+                      alt="Store Logo"
+                      className="h-12 w-12 object-contain rounded-lg border border-black"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-xl bg-black text-white flex items-center justify-center font-bold text-base shadow-sm">
+                      WB
+                    </div>
+                  )}
                 </div>
-              )}
-              <div>
-                <h3 className="text-base font-bold text-black tracking-tight">
-                  {config.companyName || 'Store Name'}
-                </h3>
-                <p className="text-[11px] text-neutral-700 mt-0.5 max-w-[280px]">
-                  {config.companyAddress}
-                </p>
-                <p className="text-[10px] text-neutral-600">{config.companyContact}</p>
-              </div>
-            </div>
+              )
+            case 'companyName':
+              return (
+                <div key="companyName" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-base font-bold text-black tracking-tight">
+                    {config.companyName || 'Store Name'}
+                  </h3>
+                </div>
+              )
+            case 'companyAddress':
+              return (
+                <div key="companyAddress" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <p className="text-[11px] text-neutral-700 mt-0.5 max-w-[280px]">
+                    {config.companyAddress}
+                  </p>
+                </div>
+              )
+            case 'companyContact':
+              return (
+                <div key="companyContact" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <p className="text-[10px] text-neutral-600">{config.companyContact}</p>
+                </div>
+              )
+            case 'invoiceTitle':
+              return (
+                <div key="invoiceTitle" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <span className="text-xl font-black tracking-wider uppercase block text-black">
+                    INVOICE
+                  </span>
+                </div>
+              )
+            case 'invoiceNumber':
+              return (
+                <div key="invoiceNumber" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <span className="text-xs font-mono text-neutral-800 block mt-0.5 font-bold">
+                    #INV-2026-0891
+                  </span>
+                </div>
+              )
+            case 'invoiceDate':
+              return (
+                <div key="invoiceDate" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <span className="text-[10px] text-neutral-600 block">Date: 2026-10-31</span>
+                </div>
+              )
+            case 'gstNumber':
+              return config.gstNumber ? (
+                <div key="gstNumber" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <span className="text-[10px] font-mono text-black font-semibold block mt-1">
+                    GST/Tax ID: {config.gstNumber}
+                  </span>
+                </div>
+              ) : null
+            default:
+              return null
+          }
+        }
 
-            <div className="text-right">
-              <span className="text-xl font-black tracking-wider uppercase block text-black">
-                INVOICE
-              </span>
-              <span className="text-xs font-mono text-neutral-800 block mt-0.5 font-bold">
-                #INV-2026-0891
-              </span>
-              <span className="text-[10px] text-neutral-600 block">Date: 2026-10-31</span>
-              {config.gstNumber && (
-                <span className="text-[10px] font-mono text-black font-semibold block mt-1">
-                  GST/Tax ID: {config.gstNumber}
-                </span>
-              )}
-            </div>
-          </div>
-        )
-
-      case 'billTo':
-        return (
-          <div key="billTo" className="grid grid-cols-2 gap-4 pb-4 mb-4 border-b border-black/20 text-xs">
-            <div>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-500 block mb-1">
-                Billed To
-              </span>
-              <span className="font-bold text-black block">Sarah Jenkins</span>
-              {config.showCustomerPhone && (
-                <>
+        case 'billTo': {
+          switch (elementKey) {
+            case 'billedToLabel':
+              return (
+                <div key="billedToLabel" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-500 block mb-1">
+                    Billed To
+                  </span>
+                </div>
+              )
+            case 'billedToName':
+              return (
+                <div key="billedToName" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <span className="font-bold text-black block">Sarah Jenkins</span>
+                </div>
+              )
+            case 'customerPhone':
+              return config.showCustomerPhone ? (
+                <div key="customerPhone" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
                   <span className="text-neutral-700 block text-[11px]">+1 (555) 234-5678</span>
+                </div>
+              ) : null
+            case 'customerTaxId':
+              return config.showCustomerPhone ? (
+                <div key="customerTaxId" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
                   <span className="text-neutral-600 block text-[10px] font-mono">Tax: TX-99821</span>
-                </>
-              )}
-            </div>
+                </div>
+              ) : null
+            case 'paymentStatusLabel':
+              return (
+                <div key="paymentStatusLabel" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-500 block mb-1">
+                    Payment Status
+                  </span>
+                </div>
+              )
+            case 'paymentStatus':
+              return (
+                <div key="paymentStatus" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-black bg-black text-white">
+                    PAID IN FULL
+                  </span>
+                </div>
+              )
+            case 'paymentMode':
+              return (
+                <div key="paymentMode" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <span className="text-neutral-700 block text-[10px] mt-1 font-medium">Mode: CASH / CARD</span>
+                </div>
+              )
+            default:
+              return null
+          }
+        }
 
-            <div className="text-right">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-500 block mb-1">
-                Payment Status
-              </span>
-              <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-black bg-black text-white">
-                PAID IN FULL
-              </span>
-              <span className="text-neutral-700 block text-[10px] mt-1 font-medium">Mode: CASH / CARD</span>
-            </div>
-          </div>
-        )
+        case 'totals': {
+          switch (elementKey) {
+            case 'subtotal':
+              return (
+                <div key="subtotal" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <div className="flex justify-between w-48">
+                    <span>Subtotal:</span>
+                    <span className="font-mono font-semibold text-black">$51.70</span>
+                  </div>
+                </div>
+              )
+            case 'taxBreakdown':
+              return config.showTaxBreakdown ? (
+                <div key="taxBreakdown" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <div className="flex justify-between w-48 text-[11px] text-neutral-600">
+                    <span>Tax / GST (8.5%):</span>
+                    <span className="font-mono text-black">+$4.39</span>
+                  </div>
+                </div>
+              ) : null
+            case 'grandTotal':
+              return (
+                <div key="grandTotal" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <div className="flex justify-between w-48 pt-2 mt-1 border-t-2 border-black text-sm font-bold text-black">
+                    <span>Grand Total:</span>
+                    <span className="font-mono text-base font-black text-black">$56.09</span>
+                  </div>
+                </div>
+              )
+            default:
+              return null
+          }
+        }
 
-      case 'itemsTable':
-        return (
-          <div key="itemsTable" className="mb-4 overflow-hidden rounded-lg border border-black">
-            <div className="px-3 py-1 bg-neutral-100 text-[10px] text-neutral-600 flex items-center justify-between border-b border-black/10">
-              <span className="italic flex items-center gap-1">
-                <GripVertical className="h-3 w-3" />
-                Drag column headers horizontally to reorder
-              </span>
-              <span className="font-mono">{activeColumns.length} Columns</span>
-            </div>
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-black text-white border-b border-black">
-                  {activeColumns.map((col) => {
-                    const isDragging = draggedColumnId === col.id
-                    const isOver = draggedColumnOverId === col.id
+        case 'footer': {
+          switch (elementKey) {
+            case 'terms':
+              return config.showTerms ? (
+                <div key="terms" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-600 block mb-1">
+                      Terms & Conditions
+                    </span>
+                    <p className="text-[10px] text-neutral-700 whitespace-pre-line leading-relaxed">
+                      {config.termsAndConditions}
+                    </p>
+                  </div>
+                </div>
+              ) : null
+            case 'qrCode':
+              return config.showQrCode ? (
+                <div key="qrCode" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <div className="flex flex-col items-center shrink-0 p-2 rounded-lg border border-black bg-neutral-100">
+                    {config.qrCodeDataUrl ? (
+                      <img
+                        src={config.qrCodeDataUrl}
+                        alt="Payment QR Code"
+                        className="h-12 w-12 object-contain"
+                      />
+                    ) : (
+                      <QrCode className="h-12 w-12 text-black" />
+                    )}
+                    {config.showQrCodeText && (
+                      <span className="text-[9px] text-neutral-700 mt-1 uppercase font-mono font-bold">
+                        Scan to Pay with UPI
+                      </span>
+                    )}
+                    {!config.showQrCodeText && !config.qrCodeDataUrl && (
+                      <span className="text-[9px] text-neutral-700 mt-1 uppercase font-mono font-bold">
+                        Scan To Verify
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : null
+            case 'signature':
+              return config.showSignature ? (
+                <div key="signature" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <div className="pt-6 flex justify-end">
+                    <div className="text-center w-40">
+                      <div className="border-b-2 border-black pb-1 mb-1" />
+                      <span className="text-[10px] uppercase text-black font-bold tracking-wider">
+                        Authorized Signature
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : null
+            case 'footerNote':
+              return config.footerNote ? (
+                <div key="footerNote" {...dragProps}>
+                  <div className="absolute -left-6 top-2 hidden group-hover:flex items-center text-black/40 hover:text-black cursor-grab select-none">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                  <p className="text-center text-[10px] text-neutral-600 pt-2 border-t border-black/20 font-medium">
+                    {config.footerNote}
+                  </p>
+                </div>
+              ) : null
+            default:
+              return null
+          }
+        }
 
-                    return (
-                      <th
-                        key={col.id}
-                        draggable
-                        onDragStart={() => handleColumnDragStart(col.id)}
-                        onDragOver={(e) => handleColumnDragOver(e, col.id)}
-                        onDrop={() => handleColumnDrop(col.id)}
-                        className={`py-2 px-3 font-bold text-[10px] uppercase tracking-wider select-none cursor-move transition-all ${
+        case 'itemsTable':
+          // Items table uses column drag-and-drop, not element drag-and-drop
+          return (
+            <div key="itemsTable" className="mb-4 overflow-hidden rounded-lg border border-black">
+              <div className="px-3 py-1 bg-neutral-100 text-[10px] text-neutral-600 flex items-center justify-between border-b border-black/10">
+                <span className="italic flex items-center gap-1">
+                  <GripVertical className="h-3 w-3" />
+                  Drag column headers horizontally to reorder
+                </span>
+                <span className="font-mono">{activeColumns.length} Columns</span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-black text-white border-b border-black">
+                    {activeColumns.map((col) => {
+                      const isDragging = draggedColumnId === col.id
+                      const isOver = draggedColumnOverId === col.id
+
+                      return (
+                        <th
+                          key={col.id}
+                          draggable
+                          onDragStart={() => handleColumnDragStart(col.id)}
+                          onDragOver={(e) => handleColumnDragOver(e, col.id)}
+                          onDrop={() => handleColumnDrop(col.id)}
+                          className={`py-2 px-3 font-bold text-[10px] uppercase tracking-wider select-none cursor-move transition-all ${
+                            col.align === 'center'
+                              ? 'text-center'
+                              : col.align === 'right'
+                              ? 'text-right'
+                              : 'text-left'
+                          } ${isDragging ? 'opacity-30' : ''} ${isOver ? 'bg-neutral-800 ring-2 ring-white ring-inset' : ''}`}
+                          title="Click and drag to reorder column"
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            <GripVertical className="h-2.5 w-2.5 text-neutral-400" />
+                            {col.label}
+                          </span>
+                        </th>
+                      )
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/20 bg-white">
+                  {mockItems.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-neutral-50">
+                      {activeColumns.map((col) => {
+                        const alignClass =
                           col.align === 'center'
                             ? 'text-center'
                             : col.align === 'right'
                             ? 'text-right'
                             : 'text-left'
-                        } ${isDragging ? 'opacity-30' : ''} ${
-                          isOver ? 'bg-neutral-800 ring-2 ring-white ring-inset' : ''
-                        }`}
-                        title="Click and drag to reorder column"
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          <GripVertical className="h-2.5 w-2.5 text-neutral-400" />
-                          {col.label}
-                        </span>
-                      </th>
-                    )
-                  })}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/20 bg-white">
-                {mockItems.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-neutral-50">
-                    {activeColumns.map((col) => {
-                      const alignClass =
-                        col.align === 'center'
-                          ? 'text-center'
-                          : col.align === 'right'
-                          ? 'text-right'
-                          : 'text-left'
 
-                      if (col.id === 'item') {
-                        return (
-                          <td key={col.id} className={`py-2 px-3 text-black ${alignClass}`}>
-                            <span className="font-semibold block">{row.item}</span>
-                          </td>
-                        )
-                      }
+                        if (col.id === 'item') {
+                          return (
+                            <td key={col.id} className={`py-2 px-3 text-black ${alignClass}`}>
+                              <span className="font-semibold block">{row.item}</span>
+                            </td>
+                          )
+                        }
 
-                      if (col.id === 'sku') {
-                        return (
-                          <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono text-[11px] ${alignClass}`}>
-                            {row.sku}
-                          </td>
-                        )
-                      }
+                        if (col.id === 'sku') {
+                          return (
+                            <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono text-[11px] ${alignClass}`}>
+                              {row.sku}
+                            </td>
+                          )
+                        }
 
-                      if (col.id === 'qty') {
-                        return (
-                          <td key={col.id} className={`py-2 px-3 text-black font-mono font-medium ${alignClass}`}>
-                            {row.qty}
-                          </td>
-                        )
-                      }
+                        if (col.id === 'qty') {
+                          return (
+                            <td key={col.id} className={`py-2 px-3 text-black font-mono font-medium ${alignClass}`}>
+                              {row.qty}
+                            </td>
+                          )
+                        }
 
-                      if (col.id === 'price') {
+                        if (col.id === 'price') {
+                          return (
+                            <td key={col.id} className={`py-2 px-3 text-black font-mono ${alignClass}`}>
+                              ${row.price.toFixed(2)}
+                            </td>
+                          )
+                        }
+
+                        if (col.id === 'discount') {
+                          return (
+                            <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono ${alignClass}`}>
+                              {row.discount}
+                            </td>
+                          )
+                        }
+
+                        if (col.id === 'tax') {
+                          return (
+                            <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono ${alignClass}`}>
+                              {row.tax}
+                            </td>
+                          )
+                        }
+
+                        if (col.id === 'total') {
+                          return (
+                            <td key={col.id} className={`py-2 px-3 text-black font-bold font-mono ${alignClass}`}>
+                              ${row.total.toFixed(2)}
+                            </td>
+                          )
+                        }
+
                         return (
                           <td key={col.id} className={`py-2 px-3 text-black font-mono ${alignClass}`}>
-                            ${row.price.toFixed(2)}
+                            {row.customVal || '—'}
                           </td>
                         )
-                      }
-
-                      if (col.id === 'discount') {
-                        return (
-                          <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono ${alignClass}`}>
-                            {row.discount}
-                          </td>
-                        )
-                      }
-
-                      if (col.id === 'tax') {
-                        return (
-                          <td key={col.id} className={`py-2 px-3 text-neutral-700 font-mono ${alignClass}`}>
-                            {row.tax}
-                          </td>
-                        )
-                      }
-
-                      if (col.id === 'total') {
-                        return (
-                          <td key={col.id} className={`py-2 px-3 text-black font-bold font-mono ${alignClass}`}>
-                            ${row.total.toFixed(2)}
-                          </td>
-                        )
-                      }
-
-                      // Dynamic value for custom created columns
-                      return (
-                        <td key={col.id} className={`py-2 px-3 text-black font-mono ${alignClass}`}>
-                          {row.customVal || '—'}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-
-      case 'totals':
-        return (
-          <div key="totals" className="flex flex-col items-end gap-1 mb-5 text-xs text-neutral-800">
-            <div className="flex justify-between w-48">
-              <span>Subtotal:</span>
-              <span className="font-mono font-semibold text-black">$51.70</span>
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            {config.showTaxBreakdown && (
-              <div className="flex justify-between w-48 text-[11px] text-neutral-600">
-                <span>Tax / GST (8.5%):</span>
-                <span className="font-mono text-black">+$4.39</span>
-              </div>
-            )}
-            <div className="flex justify-between w-48 pt-2 mt-1 border-t-2 border-black text-sm font-bold text-black">
-              <span>Grand Total:</span>
-              <span className="font-mono text-base font-black text-black">$56.09</span>
-            </div>
-          </div>
-        )
+          )
 
-      case 'footer':
-        return (
-          <div key="footer" className="pt-4 border-t border-black/20 flex flex-col gap-4 text-xs">
-            <div className="flex items-start justify-between gap-4">
-              {/* Terms and conditions */}
-              {config.showTerms && (
-                <div className="flex-1">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-600 block mb-1">
-                    Terms & Conditions
-                  </span>
-                  <p className="text-[10px] text-neutral-700 whitespace-pre-line leading-relaxed">
-                    {config.termsAndConditions}
-                  </p>
-                </div>
-              )}
-
-              {/* QR Code */}
-              {config.showQrCode && (
-                <div className="flex flex-col items-center shrink-0 p-2 rounded-lg border border-black bg-neutral-100">
-                  <QrCode className="h-12 w-12 text-black" />
-                  <span className="text-[9px] text-neutral-700 mt-1 uppercase font-mono font-bold">
-                    Scan To Verify
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Signature Line */}
-            {config.showSignature && (
-              <div className="pt-6 flex justify-end">
-                <div className="text-center w-40">
-                  <div className="border-b-2 border-black pb-1 mb-1" />
-                  <span className="text-[10px] uppercase text-black font-bold tracking-wider">
-                    Authorized Signature
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Footer Note */}
-            {config.footerNote && (
-              <p className="text-center text-[10px] text-neutral-600 pt-2 border-t border-black/20 font-medium">
-                {config.footerNote}
-              </p>
-            )}
-          </div>
-        )
-
-      default:
-        return null
+        default:
+          return null
+      }
     }
+
+    // For header and billTo, use flex layout; for others, use their natural layout
+    if (sectionKey === 'header') {
+      return (
+        <div key={sectionKey} className="pb-4 mb-4 flex items-start justify-between gap-4 border-b-2 border-black">
+          <div className="flex items-center gap-3 flex-wrap">
+            {sectionElements
+              .filter((k) => ['logo', 'companyName', 'companyAddress', 'companyContact'].includes(k))
+              .map((elementKey) => renderElement(elementKey, sectionKey))}
+          </div>
+          <div className="text-right flex flex-col items-end">
+            {sectionElements
+              .filter((k) => ['invoiceTitle', 'invoiceNumber', 'invoiceDate', 'gstNumber'].includes(k))
+              .map((elementKey) => renderElement(elementKey, sectionKey))}
+          </div>
+        </div>
+      )
+    }
+
+    if (sectionKey === 'billTo') {
+      return (
+        <div key={sectionKey} className="grid grid-cols-2 gap-4 pb-4 mb-4 border-b border-black/20 text-xs">
+          <div className="flex flex-col">
+            {sectionElements
+              .filter((k) => ['billedToLabel', 'billedToName', 'customerPhone', 'customerTaxId'].includes(k))
+              .map((elementKey) => renderElement(elementKey, sectionKey))}
+          </div>
+          <div className="text-right flex flex-col">
+            {sectionElements
+              .filter((k) => ['paymentStatusLabel', 'paymentStatus', 'paymentMode'].includes(k))
+              .map((elementKey) => renderElement(elementKey, sectionKey))}
+          </div>
+        </div>
+      )
+    }
+
+    if (sectionKey === 'totals') {
+      return (
+        <div key={sectionKey} className="flex flex-col items-end gap-1 mb-5 text-xs text-neutral-800">
+          {sectionElements.map((elementKey) => renderElement(elementKey, sectionKey))}
+        </div>
+      )
+    }
+
+    if (sectionKey === 'footer') {
+      return (
+        <div key={sectionKey} className="pt-4 border-t border-black/20 flex flex-col gap-4 text-xs">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            {sectionElements
+              .filter((k) => ['terms', 'qrCode'].includes(k))
+              .map((elementKey) => renderElement(elementKey, sectionKey))}
+          </div>
+          {sectionElements
+            .filter((k) => ['signature'].includes(k))
+            .map((elementKey) => renderElement(elementKey, sectionKey))}
+          {sectionElements
+            .filter((k) => ['footerNote'].includes(k))
+            .map((elementKey) => renderElement(elementKey, sectionKey))}
+        </div>
+      )
+    }
+
+    // itemsTable and default
+    return renderElement(sectionKey, sectionKey)
   }
 
   return (
@@ -562,7 +871,7 @@ export default function PdfCustomiser() {
             Bill PDF Customizer
           </h1>
           <p className="text-xs text-white/70 mt-1">
-            Add custom columns, reorder table headers & sections via drag-and-drop, and preview live on white paper
+            Add custom columns, reorder table headers, sections & elements via drag-and-drop, and preview live on white paper
           </p>
         </div>
 
@@ -648,6 +957,58 @@ export default function PdfCustomiser() {
               </div>
             </div>
 
+            {/* QR Code Uploader */}
+            <div>
+              <label className="text-xs text-white/70 block mb-1.5">Payment QR Code (PNG / JPEG)</label>
+              <div className="flex items-center gap-3">
+                {config.qrCodeDataUrl ? (
+                  <div className="relative h-14 w-24 rounded-lg border border-white/20 bg-white/5 p-1 flex items-center justify-center overflow-hidden">
+                    <img
+                      src={config.qrCodeDataUrl}
+                      alt="QR Code preview"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-14 w-24 rounded-lg border border-dashed border-white/30 bg-white/[0.02] flex flex-col items-center justify-center text-[10px] text-white/50">
+                    <QrCode className="h-4 w-4 mb-0.5" />
+                    No QR Code
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="h-8 px-3 rounded-lg border border-white/20 bg-black hover:bg-white/10 text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-colors w-fit">
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload QR Code
+                    <input
+                      type="file"
+                      accept="image/png, image/jpeg, image/webp"
+                      onChange={handleQrCodeUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  {config.qrCodeDataUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveQrCode}
+                      className="text-[11px] text-white/60 hover:text-white text-left underline underline-offset-2"
+                    >
+                      Remove QR Code
+                    </button>
+                  )}
+                  <label className="text-xs text-white/50 flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.showQrCodeText}
+                      onChange={(e) => handleChange('showQrCodeText', e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-white/30 bg-black text-white focus:ring-white"
+                    />
+                    Show "Scan to Pay with UPI" text
+                  </label>
+                </div>
+              </div>
+            </div>
+
             {/* Store Name & Contact */}
             <div>
               <label className="text-xs text-white/70 block mb-1">Company / Store Name *</label>
@@ -717,7 +1078,7 @@ export default function PdfCustomiser() {
             </div>
 
             <p className="text-xs text-white/60">
-              Toggle column visibility, rename headers, and drag column headers on the right PDF to change order.
+              Toggle column visibility, rename headers, and drag column headers on the right PDF to change order. Drag section elements (logo, company info, invoice title, payment status, totals, footer items) to reorder within sections.
             </p>
 
             <div className="divide-y divide-white/10">
@@ -903,7 +1264,7 @@ export default function PdfCustomiser() {
               Direct Drag-and-Drop PDF Editor
             </span>
             <span className="text-[11px] px-2 py-0.5 rounded-full border border-white/20 bg-white/[0.04] text-white/80">
-              Drag Sections or Columns to Reorder
+              Drag Sections, Elements & Columns to Reorder
             </span>
           </div>
 

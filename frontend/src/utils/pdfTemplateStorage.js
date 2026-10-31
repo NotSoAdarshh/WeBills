@@ -18,6 +18,43 @@ export const defaultSectionOrder = [
   'footer',
 ]
 
+// Default element order within each section for drag-and-drop
+export const defaultSectionElements = {
+  header: [
+    'logo',
+    'companyName',
+    'companyAddress',
+    'companyContact',
+    'invoiceTitle',
+    'invoiceNumber',
+    'invoiceDate',
+    'gstNumber',
+  ],
+  billTo: [
+    'billedToLabel',
+    'billedToName',
+    'customerPhone',
+    'customerTaxId',
+    'paymentStatusLabel',
+    'paymentStatus',
+    'paymentMode',
+  ],
+  itemsTable: [
+    // Column order is handled separately via columns config
+  ],
+  totals: [
+    'subtotal',
+    'taxBreakdown',
+    'grandTotal',
+  ],
+  footer: [
+    'terms',
+    'qrCode',
+    'signature',
+    'footerNote',
+  ],
+}
+
 export const defaultTemplateConfig = {
   companyName: 'WeBills Retail & Cafe',
   companyAddress: '450 Innovation Parkway, Suite 100, Silicon Valley, CA 94025',
@@ -28,12 +65,14 @@ export const defaultTemplateConfig = {
   showTerms: true,
   showSignature: true,
   showQrCode: true,
+  showQrCodeText: true,
   columns: defaultInvoiceColumns,
   sectionOrder: defaultSectionOrder,
   termsAndConditions:
     '1. Goods once sold can be returned within 7 days in original condition.\n2. Invoices are computer generated and valid without physical seal.',
   footerNote: 'Thank you for your business! Please visit us again.',
   logoDataUrl: '',
+  qrCodeDataUrl: '',
 }
 
 export const getStoredTemplateConfig = () => {
@@ -46,6 +85,7 @@ export const getStoredTemplateConfig = () => {
       ...parsed,
       columns: Array.isArray(parsed.columns) && parsed.columns.length > 0 ? parsed.columns : defaultInvoiceColumns,
       sectionOrder: Array.isArray(parsed.sectionOrder) && parsed.sectionOrder.length > 0 ? parsed.sectionOrder : defaultSectionOrder,
+      sectionElements: parsed.sectionElements ? { ...defaultSectionElements, ...parsed.sectionElements } : defaultSectionElements,
     }
   } catch {
     return defaultTemplateConfig
