@@ -3,6 +3,7 @@ import Sidebar from './components/sidebar'
 import BillingTerminal from './pages/billingTerminal'
 import ItemManagement from './pages/itemManagement'
 import CustomerManagement from './pages/customerManagement'
+import PdfCustomiser from './pages/pdfCustomiser'
 
 function App() {
   const [activeTab, setActiveTab] = useState('billing')
@@ -30,14 +31,18 @@ function App() {
           {activeTab === 'billing' && <BillingTerminal />}
           {activeTab === 'inventory' && <ItemManagement />}
           {activeTab === 'customers' && <CustomerManagement />}
-          {activeTab !== 'billing' && activeTab !== 'inventory' && activeTab !== 'customers' &&(
-            <div className="p-8 text-center border border-white/20 rounded-2xl bg-black my-8">
-              <h2 className="text-xl font-bold text-white mb-2 capitalize">
-                {activeTab.replace('-', ' ')}
-              </h2>
-              <p className="text-sm text-white/60">Module view coming up next.</p>
-            </div>
-          )}
+          {activeTab === 'pdf-customizer' && <PdfCustomiser />}
+          {activeTab !== 'billing' &&
+            activeTab !== 'inventory' &&
+            activeTab !== 'customers' &&
+            activeTab !== 'pdf-customizer' && (
+              <div className="p-8 text-center border border-white/20 rounded-2xl bg-black my-8">
+                <h2 className="text-xl font-bold text-white mb-2 capitalize">
+                  {activeTab.replace('-', ' ')}
+                </h2>
+                <p className="text-sm text-white/60">Module view coming up next.</p>
+              </div>
+            )}
         </div>
       </main>
     </div>
