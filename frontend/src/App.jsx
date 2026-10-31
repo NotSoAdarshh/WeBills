@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Sidebar from './components/sidebar'
 import BillingTerminal from './pages/billingTerminal'
 import ItemManagement from './pages/itemManagement'
+import CustomerManagement from './pages/customerManagement'
 
 function App() {
   const [activeTab, setActiveTab] = useState('billing')
@@ -28,7 +29,8 @@ function App() {
         <div className="w-full max-w-[1600px] mx-auto">
           {activeTab === 'billing' && <BillingTerminal />}
           {activeTab === 'inventory' && <ItemManagement />}
-          {activeTab !== 'billing' && activeTab !== 'inventory' && (
+          {activeTab === 'customers' && <CustomerManagement />}
+          {activeTab !== 'billing' && activeTab !== 'inventory' && activeTab !== 'customers' &&(
             <div className="p-8 text-center border border-white/20 rounded-2xl bg-black my-8">
               <h2 className="text-xl font-bold text-white mb-2 capitalize">
                 {activeTab.replace('-', ' ')}
