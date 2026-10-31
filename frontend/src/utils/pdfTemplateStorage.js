@@ -1,16 +1,26 @@
 const PDF_TEMPLATE_STORAGE_KEY = 'webills_pdf_template_config'
 
+export const defaultInvoiceColumns = [
+  { id: 'item', label: 'Item Description', align: 'left', enabled: true, locked: true },
+  { id: 'sku', label: 'SKU / Code', align: 'left', enabled: true, locked: false },
+  { id: 'qty', label: 'Qty', align: 'center', enabled: true, locked: false },
+  { id: 'price', label: 'Unit Price', align: 'right', enabled: true, locked: false },
+  { id: 'discount', label: 'Discount', align: 'right', enabled: false, locked: false },
+  { id: 'tax', label: 'Tax Rate', align: 'right', enabled: false, locked: false },
+  { id: 'total', label: 'Total Amount', align: 'right', enabled: true, locked: true },
+]
+
 export const defaultTemplateConfig = {
   companyName: 'WeBills Retail & Cafe',
   companyAddress: '450 Innovation Parkway, Suite 100, Silicon Valley, CA 94025',
   companyContact: '+1 (800) 555-0199 | billing@webills.local',
   gstNumber: 'GST-US-89210-A',
-  accentColor: '#3B82F6', // Electric Blue or customized
   showCustomerPhone: true,
   showTaxBreakdown: true,
   showTerms: true,
   showSignature: true,
   showQrCode: true,
+  columns: defaultInvoiceColumns,
   termsAndConditions:
     '1. Goods once sold can be returned within 7 days in original condition.\n2. Invoices are computer generated and valid without physical seal.',
   footerNote: 'Thank you for your business! Please visit us again.',
@@ -22,7 +32,11 @@ export const getStoredTemplateConfig = () => {
     const data = localStorage.getItem(PDF_TEMPLATE_STORAGE_KEY)
     if (!data) return defaultTemplateConfig
     const parsed = JSON.parse(data)
-    return { ...defaultTemplateConfig, ...parsed }
+    return {
+      ...defaultTemplateConfig,
+      ...parsed,
+      columns: Array.isArray(parsed.columns) && parsed.columns.length > 0 ? parsed.columns : defaultInvoiceColumns,
+    }
   } catch {
     return defaultTemplateConfig
   }
