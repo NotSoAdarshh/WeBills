@@ -144,62 +144,60 @@ export const generateInvoicePDF = (invoiceData, options = {}) => {
 
 /**
  * Render Header Section
- * Layout: Left side (logo + company info) side by side horizontally, Right side (invoice details) stacked vertically right-aligned
+ * Layout: Left side (logo + company info) side by side horizontally (flex items-center gap-3), Right side (invoice details) stacked vertically right-aligned
  */
 const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth) => {
   const leftX = margin
   const rightX = pageWidth - margin
-  let currentY = yPos
+  const logoY = yPos
+  let rightY = yPos
 
   // Split elements into left group (logo, company info) and right group (invoice title, number, date, GST)
   const leftElements = elements.filter((k) => ['logo', 'companyName', 'companyAddress', 'companyContact'].includes(k))
   const rightElements = elements.filter((k) => ['invoiceTitle', 'invoiceNumber', 'invoiceDate', 'gstNumber'].includes(k))
 
-  // Render left group elements side by side horizontally (like flex items-center gap-3)
-  // Start with logo at leftX, then company info to the right of logo
-  let logoBottomY = currentY
-  let companyInfoX = leftX
+  // Render left group elements side by side horizontally (like flex items-center gap-3 flex-wrap)
+  // Logo at leftX, company info starts at leftX + 25 (logo width 20 + gap 5)
+  const companyInfoX = leftX + 25
+  let logoBottomY = logoY
+  let companyInfoBottomY = logoY
 
   leftElements.forEach((elementKey) => {
     switch (elementKey) {
       case 'logo':
         if (config.logoDataUrl) {
           try {
-            doc.addImage(config.logoDataUrl, 'PNG', leftX, currentY, 20, 20)
-            logoBottomY = currentY + 22
+            doc.addImage(config.logoDataUrl, 'PNG', leftX, logoY, 20, 20)
+            logoBottomY = logoY + 22
           } catch (e) {
-            // Fallback if image fails
             doc.setFillColor(0, 0, 0)
-            doc.rect(leftX, currentY, 20, 20, 'F')
+            doc.rect(leftX, logoY, 20, 20, 'F')
             doc.setTextColor(255, 255, 255)
             doc.setFontSize(10)
             doc.setFont('helvetica', 'bold')
-            doc.text('WB', leftX + 10, currentY + 14, { align: 'center' })
-            logoBottomY = currentY + 22
+            doc.text('WB', leftX + 10, logoY + 14, { align: 'center' })
+            logoBottomY = logoY + 22
           }
         } else {
-          // Default logo placeholder
           doc.setFillColor(0, 0, 0)
-          doc.rect(leftX, currentY, 20, 20, 'F')
+          doc.rect(leftX, logoY, 20, 20, 'F')
           doc.setTextColor(255, 255, 255)
           doc.setFontSize(10)
           doc.setFont('helvetica', 'bold')
-          doc.text('WB', leftX + 10, currentY + 14, { align: 'center' })
-          logoBottomY = currentY + 22
+          doc.text('WB', leftX + 10, logoY + 14, { align: 'center' })
+          logoBottomY = logoY + 22
         }
-        companyInfoX = leftX + 25 // Company info starts to the right of logo
         break
 
       case 'companyName':
-        // Company name goes to the right of logo, at the same Y as logo top
-        currentY = addText(doc, config.companyName || 'Store Name', companyInfoX, currentY, {
+        companyInfoBottomY = addText(doc, config.companyName || 'Store Name', companyInfoX, logoY, {
           fontSize: 11,
           fontStyle: 'bold',
         })
         break
 
       case 'companyAddress':
-        currentY = addText(doc, config.companyAddress, companyInfoX, currentY, {
+        companyInfoBottomY = addText(doc, config.companyAddress, companyInfoX, companyInfoBottomY, {
           fontSize: 7,
           color: [80, 80, 80],
           maxWidth: contentWidth - 30,
@@ -207,7 +205,7 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
         break
 
       case 'companyContact':
-        currentY = addText(doc, config.companyContact, companyInfoX, currentY, {
+        companyInfoBottomY = addText(doc, config.companyContact, companyInfoX, companyInfoBottomY, {
           fontSize: 6.5,
           color: [100, 100, 100],
         })
@@ -215,11 +213,10 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
     }
   })
 
-  // The left column height is the max of logo bottom and company info bottom
-  const leftColumnBottomY = Math.max(logoBottomY, currentY)
+  // Left column height is max of logo bottom and company info bottom
+  const leftColumnBottomY = Math.max(logoBottomY, companyInfoBottomY)
 
-  // Render right group elements - stacked vertically, right-aligned
-  let rightY = yPos
+  // Render right group elements - stacked vertically, right-aligned (flex-col items-end)
   rightElements.forEach((elementKey) => {
     switch (elementKey) {
       case 'invoiceTitle':
@@ -269,13 +266,13 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
 
 /**
  * Render Bill To Section
- * Layout: Two columns side by side (grid 2 cols)
- * Left: Billed To info, Right: Payment Status
+ * Layout: Two equal columns side by side (grid 2 cols)
+ * Left: Billed To info, Right: Payment Status (right-aligned)
  */
 const renderBillTo = (doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth) => {
   let currentY = yPos
   const leftColX = margin
-  const rightColX = pageWidth - margin // Right aligned to page edge
+  const rightColX = margin + contentWidth / 2 // Center of content area (grid-cols-2)
   const colWidth = contentWidth / 2 - 10
 
   // Left column: Billed To
@@ -319,14 +316,14 @@ const renderBillTo = (doc, config, invoiceData, margin, contentWidth, yPos, elem
     }
   })
 
-  // Right column: Payment Status (right aligned)
+  // Right column: Payment Status (right aligned within its column)
   const rightElements = elements.filter((k) => ['paymentStatusLabel', 'paymentStatus', 'paymentMode'].includes(k))
   let rightY = currentY
 
   rightElements.forEach((elementKey) => {
     switch (elementKey) {
       case 'paymentStatusLabel':
-        rightY = addText(doc, 'PAYMENT STATUS', rightColX, rightY, {
+        rightY = addText(doc, 'PAYMENT STATUS', rightColX + colWidth, rightY, {
           fontSize: 6,
           fontStyle: 'bold',
           color: [100, 100, 100],
@@ -336,21 +333,21 @@ const renderBillTo = (doc, config, invoiceData, margin, contentWidth, yPos, elem
 
       case 'paymentStatus':
         const status = invoiceData.paymentStatus || 'PAID IN FULL'
-        // Draw status badge - right aligned
+        // Draw status badge - right aligned within right column
         doc.setFillColor(0, 0, 0)
         doc.setTextColor(255, 255, 255)
         doc.setFontSize(7)
         doc.setFont('helvetica', 'bold')
         const textWidth = doc.getTextWidth(status) + 4
-        const badgeX = rightColX - textWidth
+        const badgeX = rightColX + colWidth - textWidth
         doc.roundedRect(badgeX, rightY - 3, textWidth, 6, 1, 1, 'F')
-        doc.text(status, rightColX - 2, rightY + 1, { align: 'right' })
+        doc.text(status, rightColX + colWidth - 2, rightY + 1, { align: 'right' })
         doc.setTextColor(0, 0, 0)
         rightY += 8
         break
 
       case 'paymentMode':
-        rightY = addText(doc, invoiceData.paymentMode || 'Mode: CASH / CARD', rightColX, rightY, {
+        rightY = addText(doc, invoiceData.paymentMode || 'Mode: CASH / CARD', rightColX + colWidth, rightY, {
           fontSize: 6,
           color: [80, 80, 80],
           align: 'right',
@@ -513,9 +510,9 @@ const renderTotals = (doc, config, invoiceData, margin, contentWidth, yPos, elem
 
 /**
  * Render Footer Section
- * Layout: 
- * - Top row: Terms (left) and QR Code (right) side by side
- * - Signature: right-aligned
+ * Layout:
+ * - Top row: Terms (left) and QR Code (right) side by side (justify-between)
+ * - Signature: right-aligned (far right)
  * - Footer note: centered
  */
 const renderFooter = (doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth, pageHeight) => {
@@ -526,7 +523,9 @@ const renderFooter = (doc, config, invoiceData, margin, contentWidth, yPos, elem
   currentY += 4
 
   const leftColX = margin
-  const rightColX = margin + contentWidth / 2 + 5
+  const qrSize = 25
+  // QR code at far right (justify-between), terms at left
+  const qrCodeX = pageWidth - margin - qrSize
   const colWidth = contentWidth / 2 - 15
 
   // Terms and QR Code (side by side - flex items-start justify-between gap-4)
@@ -549,39 +548,38 @@ const renderFooter = (doc, config, invoiceData, margin, contentWidth, yPos, elem
 
   if (topElements.includes('qrCode') && config.showQrCode) {
     let qrY = currentY
-    const qrSize = 25
 
     if (config.qrCodeDataUrl) {
       try {
-        doc.addImage(config.qrCodeDataUrl, 'PNG', rightColX, qrY, qrSize, qrSize)
+        doc.addImage(config.qrCodeDataUrl, 'PNG', qrCodeX, qrY, qrSize, qrSize)
       } catch (e) {
         // Fallback - draw a placeholder
         doc.setDrawColor(0, 0, 0)
         doc.setLineWidth(0.5)
-        doc.rect(rightColX, qrY, qrSize, qrSize)
+        doc.rect(qrCodeX, qrY, qrSize, qrSize)
         doc.setFontSize(4)
-        doc.text('QR', rightColX + qrSize / 2, qrY + qrSize / 2 + 1.5, { align: 'center' })
+        doc.text('QR', qrCodeX + qrSize / 2, qrY + qrSize / 2 + 1.5, { align: 'center' })
       }
     } else {
       // Default QR code placeholder
       doc.setDrawColor(0, 0, 0)
       doc.setLineWidth(0.5)
-      doc.rect(rightColX, qrY, qrSize, qrSize)
+      doc.rect(qrCodeX, qrY, qrSize, qrSize)
       doc.setFontSize(4)
-      doc.text('QR', rightColX + qrSize / 2, qrY + qrSize / 2 + 1.5, { align: 'center' })
+      doc.text('QR', qrCodeX + qrSize / 2, qrY + qrSize / 2 + 1.5, { align: 'center' })
     }
 
     qrY += qrSize + 2
 
     if (config.showQrCodeText) {
-      qrY = addText(doc, 'Scan to Pay with UPI', rightColX + qrSize / 2, qrY, {
+      qrY = addText(doc, 'Scan to Pay with UPI', qrCodeX + qrSize / 2, qrY, {
         fontSize: 5,
         fontStyle: 'bold',
         align: 'center',
         color: [80, 80, 80],
       })
     } else if (!config.qrCodeDataUrl) {
-      qrY = addText(doc, 'Scan To Verify', rightColX + qrSize / 2, qrY, {
+      qrY = addText(doc, 'Scan To Verify', qrCodeX + qrSize / 2, qrY, {
         fontSize: 5,
         fontStyle: 'bold',
         align: 'center',
@@ -594,11 +592,13 @@ const renderFooter = (doc, config, invoiceData, margin, contentWidth, yPos, elem
   // Move currentY to the max of terms and QR code
   currentY = Math.max(termsEndY, qrEndY) + 5
 
-  // Signature (right-aligned)
+  // Signature (right-aligned at far right - justify-end)
   if (elements.includes('signature') && config.showSignature) {
     const sigY = currentY + 10
-    addLine(doc, rightColX + 20, sigY, rightColX + 80, sigY, [0, 0, 0], 0.5)
-    addText(doc, 'Authorized Signature', rightColX + 50, sigY + 3, {
+    const sigWidth = 60
+    const sigX = pageWidth - margin - sigWidth
+    addLine(doc, sigX, sigY, sigX + sigWidth, sigY, [0, 0, 0], 0.5)
+    addText(doc, 'Authorized Signature', sigX + sigWidth / 2, sigY + 3, {
       fontSize: 6,
       fontStyle: 'bold',
       align: 'center',
