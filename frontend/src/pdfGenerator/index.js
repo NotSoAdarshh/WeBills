@@ -267,15 +267,14 @@ const renderHeader = (doc, config, invoiceData, margin, contentWidth, yPos, elem
 /**
  * Render Bill To Section
  * Layout: Two equal columns side by side (grid 2 cols)
- * Left: Billed To info, Right: Payment Status (right-aligned)
+ * Left: Billed To info (left-aligned), Right: Payment Status (right-aligned at far right)
  */
 const renderBillTo = (doc, config, invoiceData, margin, contentWidth, yPos, elements, pageWidth) => {
   let currentY = yPos
   const leftColX = margin
-  const rightColX = margin + contentWidth / 2 // Center of content area (grid-cols-2)
-  const colWidth = contentWidth / 2 - 10
+  const rightColX = pageWidth - margin // Right edge of page (matches grid-cols-2 right column end)
 
-  // Left column: Billed To
+  // Left column: Billed To (left-aligned)
   const leftElements = elements.filter((k) => ['billedToLabel', 'billedToName', 'customerPhone', 'customerTaxId'].includes(k))
   let leftY = currentY
 
@@ -316,14 +315,14 @@ const renderBillTo = (doc, config, invoiceData, margin, contentWidth, yPos, elem
     }
   })
 
-  // Right column: Payment Status (right aligned within its column)
+  // Right column: Payment Status (right-aligned at far right, matching text-right flex-col)
   const rightElements = elements.filter((k) => ['paymentStatusLabel', 'paymentStatus', 'paymentMode'].includes(k))
   let rightY = currentY
 
   rightElements.forEach((elementKey) => {
     switch (elementKey) {
       case 'paymentStatusLabel':
-        rightY = addText(doc, 'PAYMENT STATUS', rightColX + colWidth, rightY, {
+        rightY = addText(doc, 'PAYMENT STATUS', rightColX, rightY, {
           fontSize: 6,
           fontStyle: 'bold',
           color: [100, 100, 100],
@@ -333,21 +332,21 @@ const renderBillTo = (doc, config, invoiceData, margin, contentWidth, yPos, elem
 
       case 'paymentStatus':
         const status = invoiceData.paymentStatus || 'PAID IN FULL'
-        // Draw status badge - right aligned within right column
+        // Draw status badge - right aligned at far right
         doc.setFillColor(0, 0, 0)
         doc.setTextColor(255, 255, 255)
         doc.setFontSize(7)
         doc.setFont('helvetica', 'bold')
         const textWidth = doc.getTextWidth(status) + 4
-        const badgeX = rightColX + colWidth - textWidth
+        const badgeX = rightColX - textWidth
         doc.roundedRect(badgeX, rightY - 3, textWidth, 6, 1, 1, 'F')
-        doc.text(status, rightColX + colWidth - 2, rightY + 1, { align: 'right' })
+        doc.text(status, rightColX - 2, rightY + 1, { align: 'right' })
         doc.setTextColor(0, 0, 0)
         rightY += 8
         break
 
       case 'paymentMode':
-        rightY = addText(doc, invoiceData.paymentMode || 'Mode: CASH / CARD', rightColX + colWidth, rightY, {
+        rightY = addText(doc, invoiceData.paymentMode || 'Mode: CASH / CARD', rightColX, rightY, {
           fontSize: 6,
           color: [80, 80, 80],
           align: 'right',
